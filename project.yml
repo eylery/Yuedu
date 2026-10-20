@@ -1,0 +1,60 @@
+name: Yuedu
+options:
+  developmentLanguage: zh-Hans
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    GENERATE_INFOPLIST_FILE: NO
+targets:
+  Yuedu:
+    type: application
+    platform: iOS
+    sources:
+      - path: Yuedu
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.yuedu
+        INFOPLIST_FILE: Yuedu/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+    dependencies:
+      - sdk: libz.tbd
+  YueduTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: YueduTests
+    dependencies:
+      - target: Yuedu
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.yuedu.tests
+  YueduUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: YueduUITests
+    dependencies:
+      - target: Yuedu
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.yuedu.uitests
+schemes:
+  Yuedu:
+    build:
+      targets:
+        Yuedu: all
+    test:
+      targets:
+        - YueduTests
+        - YueduUITests

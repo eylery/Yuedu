@@ -1,0 +1,801 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		019FBADC0A9570B059292C78 /* LegadoRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44AE4E00069E999796F69600 /* LegadoRule.swift */; };
+		06366081496E535E4C6E271E /* SourceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC0F9CBA7C652D56CA8F388 /* SourceModels.swift */; };
+		0753A6E70A99E7BA0FEF36DB /* ProfileViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051CFFBA2AA5F41565917C04 /* ProfileViewController.swift */; };
+		08160449DE8897A4FA29695A /* SourceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BBB30BAE51F2DE21B2CA464 /* SourceEngine.swift */; };
+		09219706E87D38AE001E2B27 /* LegadoNativeUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2AEC5C8C432B3D4AFAC23C7 /* LegadoNativeUtilities.swift */; };
+		0972E065AB3247D314C0C4AD /* YueduBookDetailViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E3E70054BDDAB4A174005B /* YueduBookDetailViewController.swift */; };
+		0B7C68A7BCF269821F35DFFE /* YueduReadingAndDownloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7117FE24D033A6872ECD6187 /* YueduReadingAndDownloadTests.swift */; };
+		17C78875453BC0E00AB30F6E /* LegadoAdvancedRuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95C4B4A54C838C7A426CAAF3 /* LegadoAdvancedRuleTests.swift */; };
+		1D2195789DA23D0BD991220B /* DiscoverViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 233869572390501AD9F9A7F0 /* DiscoverViewController.swift */; };
+		1EDA01C0028A21C1DAFE26BF /* BookImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5816E3F008067DF486C4E781 /* BookImporter.swift */; };
+		2328D37D40AF41F3BD622CE9 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C58F1C1829AFC5FC3B6CC72 /* App.swift */; };
+		3219BA62CD0D1AF52C403055 /* YueduLibraryToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 225E260AC2912EF206BBC1AF /* YueduLibraryToolsTests.swift */; };
+		38C6BCB3777318308473167E /* SourceCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40623A20590C1BB7771994B4 /* SourceCompatibilityTests.swift */; };
+		3BBF38F8DF9956C21CFDBC2E /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = F6554196889C66BB63531751 /* libz.tbd */; };
+		3D6EA90F8C54F279EA3A1941 /* YueduBackupViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83968B4E5F97A425CBF2328C /* YueduBackupViewController.swift */; };
+		4F5600B92D4D50A5FCDE2DEA /* SourceExploreViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9DD05A1695987154C8298C /* SourceExploreViewController.swift */; };
+		5470869C6840B17D41CA203F /* SourceLoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D9595E2764EDF0971D5696 /* SourceLoginViewController.swift */; };
+		6753BC1E142B9F447F5EEC16 /* LegadoBrowserController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58FAB3C641127BC41FC88F6 /* LegadoBrowserController.swift */; };
+		6F0DCF1C23F7BD4F7A8A36C8 /* OnlineSearchViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C976D2E7165C971784F820CD /* OnlineSearchViewController.swift */; };
+		6FACBB5CFCAF78CCC6551EAF /* SourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76BCAA8089F2277961E26C50 /* SourceStore.swift */; };
+		776F5AB711FCC12E020D160A /* SourceFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8E9A3E360FF406B4A9F803E /* SourceFlowUITests.swift */; };
+		7869ED9B562D6A231ECEFE80 /* YueduDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2E1DD9B07FA302E9810FFA /* YueduDownloadManager.swift */; };
+		79B55F5983EA4E78D1F146CF /* LegadoRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F91DB360DC49321277BAE3 /* LegadoRuntimeTests.swift */; };
+		7BA9DF9FAC495AC60D614C03 /* EPUBReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 795A4F2588B9D5D34958312F /* EPUBReader.swift */; };
+		7D5AC0D307980E1676323CB6 /* BookImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 677BC4B6A9D245EAEB15836B /* BookImporterTests.swift */; };
+		7E3C42C6685BC1674F394F54 /* LegadoRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4458A259CFC8654E3B2617 /* LegadoRuntime.swift */; };
+		81767D62CBB2ECF76C43A2E4 /* runtime.js in Resources */ = {isa = PBXBuildFile; fileRef = B32E3979AD9648529A35B759 /* runtime.js */; };
+		8EAA04636E831261EFAD316E /* SampleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894B6402687DF565E576CF5C /* SampleLibrary.swift */; };
+		8F57CBF72CAB190C092BC5BD /* YueduUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3495416E3F2F115E994A785D /* YueduUITests.swift */; };
+		99AC7872F808DC93E97EA199 /* example-source.json in Resources */ = {isa = PBXBuildFile; fileRef = 360AD29079644A7F65EE9571 /* example-source.json */; };
+		99AD872C5592FA2443604F0D /* EPUBArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0278199E831F99F9E9EA405A /* EPUBArchive.swift */; };
+		9AFE00065BC5BFF96DD4C9A7 /* YueduBackgroundNetworkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5055C9F22CD7E648D08939 /* YueduBackgroundNetworkTests.swift */; };
+		9E98A658ABBAD01769E7AC30 /* rules.js in Resources */ = {isa = PBXBuildFile; fileRef = D7D2782709A40D4929433142 /* rules.js */; };
+		AEF596EF433A1CAF608139B2 /* LegadoNativeUtilitiesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6202D27F6AE478E953A2ABED /* LegadoNativeUtilitiesTests.swift */; };
+		B0DDE7D4CABC7EFBE9EA8828 /* LegadoRuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F15703897C16B1FF2219945 /* LegadoRuleTests.swift */; };
+		BC4FCCD34E14292DD96A5072 /* ReaderContentsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F623C4018833263578AB7E /* ReaderContentsViewController.swift */; };
+		C154A8C42A2D6878CECB08B1 /* LibraryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15648E7E9DC9B7008DDD89CF /* LibraryStoreTests.swift */; };
+		C36D663B837238FBA53E6AFB /* LegadoHTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF7F7D3294DA208D33127D25 /* LegadoHTTPClient.swift */; };
+		C5903204DA6D9FA94E7E2AB4 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDE14BDBD1CEAD2BED3E0A6 /* LibraryStore.swift */; };
+		C5E8226185230F5AF18E30F2 /* YueduPagination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2672779C1E2B5CA58B3B1A /* YueduPagination.swift */; };
+		C8979A0A885766CBBEA0AA82 /* YueduBackgroundAndCurlUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3AA928C1B0922AA4369AE54 /* YueduBackgroundAndCurlUITests.swift */; };
+		CABFC62FD68803EE23B6C345 /* LegadoHTTPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A3FB27A38D6CA15748F13E /* LegadoHTTPTests.swift */; };
+		CC45171DEA533CE494914ED0 /* ReadingSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5660CF6FBEB2A59AA03D5D3F /* ReadingSettingsViewController.swift */; };
+		CCA18279B9F60996C9F6F3D5 /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0CA189F90B31E4D99E20B8 /* Design.swift */; };
+		D2C36DB191017D010A9EC3AE /* YueduBackgroundTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827D2F2AED803E6FC0063281 /* YueduBackgroundTransfer.swift */; };
+		D380DD95437D9E635482F398 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67CBE5F17103BDAC042E5190 /* Models.swift */; };
+		D6634A405C0BC5C41F0804ED /* YueduPageReaderController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F845B6E943208DCB08AB097 /* YueduPageReaderController.swift */; };
+		D80AF1B08813BC3E79F2CB0B /* ReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9DB37DCF7D30947D4FA4E1 /* ReaderTests.swift */; };
+		DAD5E02FD35147A66B63DB41 /* SourceEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FBFD4FE846B79D876ABABB4 /* SourceEngineTests.swift */; };
+		DFE9177E0CECA2D91C355D00 /* ReaderPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D9888CE06DD083EF56940A0 /* ReaderPreferences.swift */; };
+		EDD846B4F19702F044D1C6F0 /* YueduLibraryBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0472C2632DCC4DB74AFE15A5 /* YueduLibraryBackup.swift */; };
+		F000A8A42DE945D057BF5EB6 /* YueduCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D68CA0F1B7763FEC9A9EFD6 /* YueduCatalog.swift */; };
+		F026A996F321D4FB1C122A3B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4AFEC718DBAFAFC36A07CD8D /* Assets.xcassets */; };
+		F22163092E20BBE9C0362110 /* BookshelfViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC05D575B5A93B0D6B40CCCB /* BookshelfViewController.swift */; };
+		F35493A6C8268C5B3D4D036B /* SourcesViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6991DD7D59E8C4BFD1C9AAE /* SourcesViewController.swift */; };
+		F8FD6BE5B2665FBF8C607239 /* ReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 029F407F777B00FD47506A5E /* ReaderViewController.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A9BA68368172E7FD226D9344 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98183A2D2BE8F7EAFD2C0805 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 00E326B3CDE69E9F8A006E56;
+			remoteInfo = Yuedu;
+		};
+		D12C828ED920D2F8D3897D10 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98183A2D2BE8F7EAFD2C0805 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 00E326B3CDE69E9F8A006E56;
+			remoteInfo = Yuedu;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0278199E831F99F9E9EA405A /* EPUBArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBArchive.swift; sourceTree = "<group>"; };
+		029F407F777B00FD47506A5E /* ReaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderViewController.swift; sourceTree = "<group>"; };
+		03F91DB360DC49321277BAE3 /* LegadoRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoRuntimeTests.swift; sourceTree = "<group>"; };
+		0472C2632DCC4DB74AFE15A5 /* YueduLibraryBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduLibraryBackup.swift; sourceTree = "<group>"; };
+		051CFFBA2AA5F41565917C04 /* ProfileViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewController.swift; sourceTree = "<group>"; };
+		0A5055C9F22CD7E648D08939 /* YueduBackgroundNetworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduBackgroundNetworkTests.swift; sourceTree = "<group>"; };
+		0B2E1DD9B07FA302E9810FFA /* YueduDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduDownloadManager.swift; sourceTree = "<group>"; };
+		15648E7E9DC9B7008DDD89CF /* LibraryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStoreTests.swift; sourceTree = "<group>"; };
+		1A2672779C1E2B5CA58B3B1A /* YueduPagination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduPagination.swift; sourceTree = "<group>"; };
+		1A9DD05A1695987154C8298C /* SourceExploreViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceExploreViewController.swift; sourceTree = "<group>"; };
+		1F15703897C16B1FF2219945 /* LegadoRuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoRuleTests.swift; sourceTree = "<group>"; };
+		225E260AC2912EF206BBC1AF /* YueduLibraryToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduLibraryToolsTests.swift; sourceTree = "<group>"; };
+		233869572390501AD9F9A7F0 /* DiscoverViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewController.swift; sourceTree = "<group>"; };
+		23E6EC515D53DA1DE0CDEE1A /* Yuedu.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Yuedu.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2D68CA0F1B7763FEC9A9EFD6 /* YueduCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduCatalog.swift; sourceTree = "<group>"; };
+		2E575EE9678E8075A9035D1E /* YueduTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YueduTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3495416E3F2F115E994A785D /* YueduUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduUITests.swift; sourceTree = "<group>"; };
+		360AD29079644A7F65EE9571 /* example-source.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "example-source.json"; sourceTree = "<group>"; };
+		37A3FB27A38D6CA15748F13E /* LegadoHTTPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoHTTPTests.swift; sourceTree = "<group>"; };
+		39F623C4018833263578AB7E /* ReaderContentsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentsViewController.swift; sourceTree = "<group>"; };
+		3D9888CE06DD083EF56940A0 /* ReaderPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferences.swift; sourceTree = "<group>"; };
+		3FBFD4FE846B79D876ABABB4 /* SourceEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceEngineTests.swift; sourceTree = "<group>"; };
+		40623A20590C1BB7771994B4 /* SourceCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceCompatibilityTests.swift; sourceTree = "<group>"; };
+		44AE4E00069E999796F69600 /* LegadoRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoRule.swift; sourceTree = "<group>"; };
+		4AFEC718DBAFAFC36A07CD8D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4D4458A259CFC8654E3B2617 /* LegadoRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoRuntime.swift; sourceTree = "<group>"; };
+		4F845B6E943208DCB08AB097 /* YueduPageReaderController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduPageReaderController.swift; sourceTree = "<group>"; };
+		506388F03E08B1AB38C563A4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		5660CF6FBEB2A59AA03D5D3F /* ReadingSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSettingsViewController.swift; sourceTree = "<group>"; };
+		5816E3F008067DF486C4E781 /* BookImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookImporter.swift; sourceTree = "<group>"; };
+		6202D27F6AE478E953A2ABED /* LegadoNativeUtilitiesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoNativeUtilitiesTests.swift; sourceTree = "<group>"; };
+		677BC4B6A9D245EAEB15836B /* BookImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookImporterTests.swift; sourceTree = "<group>"; };
+		67CBE5F17103BDAC042E5190 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		6959CB92218155FBD9180592 /* YueduUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YueduUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6C58F1C1829AFC5FC3B6CC72 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		6FDE14BDBD1CEAD2BED3E0A6 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
+		7117FE24D033A6872ECD6187 /* YueduReadingAndDownloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduReadingAndDownloadTests.swift; sourceTree = "<group>"; };
+		76BCAA8089F2277961E26C50 /* SourceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceStore.swift; sourceTree = "<group>"; };
+		795A4F2588B9D5D34958312F /* EPUBReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBReader.swift; sourceTree = "<group>"; };
+		827D2F2AED803E6FC0063281 /* YueduBackgroundTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduBackgroundTransfer.swift; sourceTree = "<group>"; };
+		83968B4E5F97A425CBF2328C /* YueduBackupViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduBackupViewController.swift; sourceTree = "<group>"; };
+		83E3E70054BDDAB4A174005B /* YueduBookDetailViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduBookDetailViewController.swift; sourceTree = "<group>"; };
+		894B6402687DF565E576CF5C /* SampleLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleLibrary.swift; sourceTree = "<group>"; };
+		8BBB30BAE51F2DE21B2CA464 /* SourceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceEngine.swift; sourceTree = "<group>"; };
+		95C4B4A54C838C7A426CAAF3 /* LegadoAdvancedRuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoAdvancedRuleTests.swift; sourceTree = "<group>"; };
+		A2AEC5C8C432B3D4AFAC23C7 /* LegadoNativeUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoNativeUtilities.swift; sourceTree = "<group>"; };
+		A8E9A3E360FF406B4A9F803E /* SourceFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFlowUITests.swift; sourceTree = "<group>"; };
+		AC9DB37DCF7D30947D4FA4E1 /* ReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTests.swift; sourceTree = "<group>"; };
+		B32E3979AD9648529A35B759 /* runtime.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = runtime.js; sourceTree = "<group>"; };
+		B8D9595E2764EDF0971D5696 /* SourceLoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceLoginViewController.swift; sourceTree = "<group>"; };
+		BA0CA189F90B31E4D99E20B8 /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
+		BC05D575B5A93B0D6B40CCCB /* BookshelfViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookshelfViewController.swift; sourceTree = "<group>"; };
+		C976D2E7165C971784F820CD /* OnlineSearchViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnlineSearchViewController.swift; sourceTree = "<group>"; };
+		D7D2782709A40D4929433142 /* rules.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = rules.js; sourceTree = "<group>"; };
+		E6991DD7D59E8C4BFD1C9AAE /* SourcesViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesViewController.swift; sourceTree = "<group>"; };
+		EDC0F9CBA7C652D56CA8F388 /* SourceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceModels.swift; sourceTree = "<group>"; };
+		F3AA928C1B0922AA4369AE54 /* YueduBackgroundAndCurlUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduBackgroundAndCurlUITests.swift; sourceTree = "<group>"; };
+		F58FAB3C641127BC41FC88F6 /* LegadoBrowserController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoBrowserController.swift; sourceTree = "<group>"; };
+		F6554196889C66BB63531751 /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
+		FF7F7D3294DA208D33127D25 /* LegadoHTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoHTTPClient.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		508D577A67254DDE25A7A0FC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3BBF38F8DF9956C21CFDBC2E /* libz.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		005128C46261FC3F94DEF633 /* Reading */ = {
+			isa = PBXGroup;
+			children = (
+				39F623C4018833263578AB7E /* ReaderContentsViewController.swift */,
+				3D9888CE06DD083EF56940A0 /* ReaderPreferences.swift */,
+				029F407F777B00FD47506A5E /* ReaderViewController.swift */,
+				5660CF6FBEB2A59AA03D5D3F /* ReadingSettingsViewController.swift */,
+				4F845B6E943208DCB08AB097 /* YueduPageReaderController.swift */,
+				1A2672779C1E2B5CA58B3B1A /* YueduPagination.swift */,
+			);
+			path = Reading;
+			sourceTree = "<group>";
+		};
+		13980AB3359F7099F7617537 /* Import */ = {
+			isa = PBXGroup;
+			children = (
+				5816E3F008067DF486C4E781 /* BookImporter.swift */,
+				0278199E831F99F9E9EA405A /* EPUBArchive.swift */,
+				795A4F2588B9D5D34958312F /* EPUBReader.swift */,
+			);
+			path = Import;
+			sourceTree = "<group>";
+		};
+		4C5FF47664C1392400F40831 = {
+			isa = PBXGroup;
+			children = (
+				661C2CC6441F329EE0A4BA57 /* Yuedu */,
+				8A2DD9CBE3F739723F398E4A /* YueduTests */,
+				4D0F85C17DB49E9ED01FA5A0 /* YueduUITests */,
+				9F52CF67A57DC12566A04E48 /* Frameworks */,
+				B2421EFD8BB67EA43F5B0CBF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4D0F85C17DB49E9ED01FA5A0 /* YueduUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A8E9A3E360FF406B4A9F803E /* SourceFlowUITests.swift */,
+				F3AA928C1B0922AA4369AE54 /* YueduBackgroundAndCurlUITests.swift */,
+				3495416E3F2F115E994A785D /* YueduUITests.swift */,
+			);
+			path = YueduUITests;
+			sourceTree = "<group>";
+		};
+		661C2CC6441F329EE0A4BA57 /* Yuedu */ = {
+			isa = PBXGroup;
+			children = (
+				6C58F1C1829AFC5FC3B6CC72 /* App.swift */,
+				506388F03E08B1AB38C563A4 /* Info.plist */,
+				6D781D6FF9618EA0DBFA2EEB /* Core */,
+				13980AB3359F7099F7617537 /* Import */,
+				005128C46261FC3F94DEF633 /* Reading */,
+				DBFCC71640C94E4CAC366660 /* Resources */,
+				F118F25952D1007F495F43A6 /* Sources */,
+				F77F8F1E335104B1360229B1 /* UI */,
+			);
+			path = Yuedu;
+			sourceTree = "<group>";
+		};
+		6D781D6FF9618EA0DBFA2EEB /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				6FDE14BDBD1CEAD2BED3E0A6 /* LibraryStore.swift */,
+				67CBE5F17103BDAC042E5190 /* Models.swift */,
+				894B6402687DF565E576CF5C /* SampleLibrary.swift */,
+				827D2F2AED803E6FC0063281 /* YueduBackgroundTransfer.swift */,
+				2D68CA0F1B7763FEC9A9EFD6 /* YueduCatalog.swift */,
+				0B2E1DD9B07FA302E9810FFA /* YueduDownloadManager.swift */,
+				0472C2632DCC4DB74AFE15A5 /* YueduLibraryBackup.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		8A2DD9CBE3F739723F398E4A /* YueduTests */ = {
+			isa = PBXGroup;
+			children = (
+				677BC4B6A9D245EAEB15836B /* BookImporterTests.swift */,
+				95C4B4A54C838C7A426CAAF3 /* LegadoAdvancedRuleTests.swift */,
+				37A3FB27A38D6CA15748F13E /* LegadoHTTPTests.swift */,
+				6202D27F6AE478E953A2ABED /* LegadoNativeUtilitiesTests.swift */,
+				1F15703897C16B1FF2219945 /* LegadoRuleTests.swift */,
+				03F91DB360DC49321277BAE3 /* LegadoRuntimeTests.swift */,
+				15648E7E9DC9B7008DDD89CF /* LibraryStoreTests.swift */,
+				AC9DB37DCF7D30947D4FA4E1 /* ReaderTests.swift */,
+				40623A20590C1BB7771994B4 /* SourceCompatibilityTests.swift */,
+				3FBFD4FE846B79D876ABABB4 /* SourceEngineTests.swift */,
+				0A5055C9F22CD7E648D08939 /* YueduBackgroundNetworkTests.swift */,
+				225E260AC2912EF206BBC1AF /* YueduLibraryToolsTests.swift */,
+				7117FE24D033A6872ECD6187 /* YueduReadingAndDownloadTests.swift */,
+			);
+			path = YueduTests;
+			sourceTree = "<group>";
+		};
+		9F52CF67A57DC12566A04E48 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F6554196889C66BB63531751 /* libz.tbd */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		B2421EFD8BB67EA43F5B0CBF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				23E6EC515D53DA1DE0CDEE1A /* Yuedu.app */,
+				2E575EE9678E8075A9035D1E /* YueduTests.xctest */,
+				6959CB92218155FBD9180592 /* YueduUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B58E68480F44A95891AE1567 /* Legado */ = {
+			isa = PBXGroup;
+			children = (
+				D7D2782709A40D4929433142 /* rules.js */,
+				B32E3979AD9648529A35B759 /* runtime.js */,
+			);
+			path = Legado;
+			sourceTree = "<group>";
+		};
+		DBFCC71640C94E4CAC366660 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4AFEC718DBAFAFC36A07CD8D /* Assets.xcassets */,
+				360AD29079644A7F65EE9571 /* example-source.json */,
+				B58E68480F44A95891AE1567 /* Legado */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		F118F25952D1007F495F43A6 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				F58FAB3C641127BC41FC88F6 /* LegadoBrowserController.swift */,
+				FF7F7D3294DA208D33127D25 /* LegadoHTTPClient.swift */,
+				A2AEC5C8C432B3D4AFAC23C7 /* LegadoNativeUtilities.swift */,
+				44AE4E00069E999796F69600 /* LegadoRule.swift */,
+				4D4458A259CFC8654E3B2617 /* LegadoRuntime.swift */,
+				C976D2E7165C971784F820CD /* OnlineSearchViewController.swift */,
+				8BBB30BAE51F2DE21B2CA464 /* SourceEngine.swift */,
+				1A9DD05A1695987154C8298C /* SourceExploreViewController.swift */,
+				B8D9595E2764EDF0971D5696 /* SourceLoginViewController.swift */,
+				EDC0F9CBA7C652D56CA8F388 /* SourceModels.swift */,
+				76BCAA8089F2277961E26C50 /* SourceStore.swift */,
+				E6991DD7D59E8C4BFD1C9AAE /* SourcesViewController.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		F77F8F1E335104B1360229B1 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				BC05D575B5A93B0D6B40CCCB /* BookshelfViewController.swift */,
+				BA0CA189F90B31E4D99E20B8 /* Design.swift */,
+				233869572390501AD9F9A7F0 /* DiscoverViewController.swift */,
+				051CFFBA2AA5F41565917C04 /* ProfileViewController.swift */,
+				83968B4E5F97A425CBF2328C /* YueduBackupViewController.swift */,
+				83E3E70054BDDAB4A174005B /* YueduBookDetailViewController.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		00E326B3CDE69E9F8A006E56 /* Yuedu */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C7217D397372F246F76305D5 /* Build configuration list for PBXNativeTarget "Yuedu" */;
+			buildPhases = (
+				8AF48A887783D09AB8B3EDCE /* Sources */,
+				1A2878C6CF66E97300D6B896 /* Resources */,
+				508D577A67254DDE25A7A0FC /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Yuedu;
+			packageProductDependencies = (
+			);
+			productName = Yuedu;
+			productReference = 23E6EC515D53DA1DE0CDEE1A /* Yuedu.app */;
+			productType = "com.apple.product-type.application";
+		};
+		041D16A6526EA543D028BF28 /* YueduUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 751F7F2242A2399EE7E1B737 /* Build configuration list for PBXNativeTarget "YueduUITests" */;
+			buildPhases = (
+				B60786B178C7C35CF76BF9B2 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7D2302AA39478CBE830EE433 /* PBXTargetDependency */,
+			);
+			name = YueduUITests;
+			packageProductDependencies = (
+			);
+			productName = YueduUITests;
+			productReference = 6959CB92218155FBD9180592 /* YueduUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		F607B39126A2795709B8207C /* YueduTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0020F6EA408054AF59B3A900 /* Build configuration list for PBXNativeTarget "YueduTests" */;
+			buildPhases = (
+				5B8C16ABED09040FD5AAE53C /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				593B0E4689256098607F6652 /* PBXTargetDependency */,
+			);
+			name = YueduTests;
+			packageProductDependencies = (
+			);
+			productName = YueduTests;
+			productReference = 2E575EE9678E8075A9035D1E /* YueduTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98183A2D2BE8F7EAFD2C0805 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					00E326B3CDE69E9F8A006E56 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					041D16A6526EA543D028BF28 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+						TestTargetID = 00E326B3CDE69E9F8A006E56;
+					};
+					F607B39126A2795709B8207C = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 6FF6F8D114BAB0608AC414F9 /* Build configuration list for PBXProject "Yuedu" */;
+			developmentRegion = "zh-Hans";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				"zh-Hans",
+			);
+			mainGroup = 4C5FF47664C1392400F40831;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B2421EFD8BB67EA43F5B0CBF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				00E326B3CDE69E9F8A006E56 /* Yuedu */,
+				F607B39126A2795709B8207C /* YueduTests */,
+				041D16A6526EA543D028BF28 /* YueduUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1A2878C6CF66E97300D6B896 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F026A996F321D4FB1C122A3B /* Assets.xcassets in Resources */,
+				99AC7872F808DC93E97EA199 /* example-source.json in Resources */,
+				9E98A658ABBAD01769E7AC30 /* rules.js in Resources */,
+				81767D62CBB2ECF76C43A2E4 /* runtime.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5B8C16ABED09040FD5AAE53C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7D5AC0D307980E1676323CB6 /* BookImporterTests.swift in Sources */,
+				17C78875453BC0E00AB30F6E /* LegadoAdvancedRuleTests.swift in Sources */,
+				CABFC62FD68803EE23B6C345 /* LegadoHTTPTests.swift in Sources */,
+				AEF596EF433A1CAF608139B2 /* LegadoNativeUtilitiesTests.swift in Sources */,
+				B0DDE7D4CABC7EFBE9EA8828 /* LegadoRuleTests.swift in Sources */,
+				79B55F5983EA4E78D1F146CF /* LegadoRuntimeTests.swift in Sources */,
+				C154A8C42A2D6878CECB08B1 /* LibraryStoreTests.swift in Sources */,
+				D80AF1B08813BC3E79F2CB0B /* ReaderTests.swift in Sources */,
+				38C6BCB3777318308473167E /* SourceCompatibilityTests.swift in Sources */,
+				DAD5E02FD35147A66B63DB41 /* SourceEngineTests.swift in Sources */,
+				9AFE00065BC5BFF96DD4C9A7 /* YueduBackgroundNetworkTests.swift in Sources */,
+				3219BA62CD0D1AF52C403055 /* YueduLibraryToolsTests.swift in Sources */,
+				0B7C68A7BCF269821F35DFFE /* YueduReadingAndDownloadTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AF48A887783D09AB8B3EDCE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2328D37D40AF41F3BD622CE9 /* App.swift in Sources */,
+				1EDA01C0028A21C1DAFE26BF /* BookImporter.swift in Sources */,
+				F22163092E20BBE9C0362110 /* BookshelfViewController.swift in Sources */,
+				CCA18279B9F60996C9F6F3D5 /* Design.swift in Sources */,
+				1D2195789DA23D0BD991220B /* DiscoverViewController.swift in Sources */,
+				99AD872C5592FA2443604F0D /* EPUBArchive.swift in Sources */,
+				7BA9DF9FAC495AC60D614C03 /* EPUBReader.swift in Sources */,
+				6753BC1E142B9F447F5EEC16 /* LegadoBrowserController.swift in Sources */,
+				C36D663B837238FBA53E6AFB /* LegadoHTTPClient.swift in Sources */,
+				09219706E87D38AE001E2B27 /* LegadoNativeUtilities.swift in Sources */,
+				019FBADC0A9570B059292C78 /* LegadoRule.swift in Sources */,
+				7E3C42C6685BC1674F394F54 /* LegadoRuntime.swift in Sources */,
+				C5903204DA6D9FA94E7E2AB4 /* LibraryStore.swift in Sources */,
+				D380DD95437D9E635482F398 /* Models.swift in Sources */,
+				6F0DCF1C23F7BD4F7A8A36C8 /* OnlineSearchViewController.swift in Sources */,
+				0753A6E70A99E7BA0FEF36DB /* ProfileViewController.swift in Sources */,
+				BC4FCCD34E14292DD96A5072 /* ReaderContentsViewController.swift in Sources */,
+				DFE9177E0CECA2D91C355D00 /* ReaderPreferences.swift in Sources */,
+				F8FD6BE5B2665FBF8C607239 /* ReaderViewController.swift in Sources */,
+				CC45171DEA533CE494914ED0 /* ReadingSettingsViewController.swift in Sources */,
+				8EAA04636E831261EFAD316E /* SampleLibrary.swift in Sources */,
+				08160449DE8897A4FA29695A /* SourceEngine.swift in Sources */,
+				4F5600B92D4D50A5FCDE2DEA /* SourceExploreViewController.swift in Sources */,
+				5470869C6840B17D41CA203F /* SourceLoginViewController.swift in Sources */,
+				06366081496E535E4C6E271E /* SourceModels.swift in Sources */,
+				6FACBB5CFCAF78CCC6551EAF /* SourceStore.swift in Sources */,
+				F35493A6C8268C5B3D4D036B /* SourcesViewController.swift in Sources */,
+				D2C36DB191017D010A9EC3AE /* YueduBackgroundTransfer.swift in Sources */,
+				3D6EA90F8C54F279EA3A1941 /* YueduBackupViewController.swift in Sources */,
+				0972E065AB3247D314C0C4AD /* YueduBookDetailViewController.swift in Sources */,
+				F000A8A42DE945D057BF5EB6 /* YueduCatalog.swift in Sources */,
+				7869ED9B562D6A231ECEFE80 /* YueduDownloadManager.swift in Sources */,
+				EDD846B4F19702F044D1C6F0 /* YueduLibraryBackup.swift in Sources */,
+				D6634A405C0BC5C41F0804ED /* YueduPageReaderController.swift in Sources */,
+				C5E8226185230F5AF18E30F2 /* YueduPagination.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B60786B178C7C35CF76BF9B2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				776F5AB711FCC12E020D160A /* SourceFlowUITests.swift in Sources */,
+				C8979A0A885766CBBEA0AA82 /* YueduBackgroundAndCurlUITests.swift in Sources */,
+				8F57CBF72CAB190C092BC5BD /* YueduUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		593B0E4689256098607F6652 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 00E326B3CDE69E9F8A006E56 /* Yuedu */;
+			targetProxy = D12C828ED920D2F8D3897D10 /* PBXContainerItemProxy */;
+		};
+		7D2302AA39478CBE830EE433 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 00E326B3CDE69E9F8A006E56 /* Yuedu */;
+			targetProxy = A9BA68368172E7FD226D9344 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		15BF3AE451008E7724F84511 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Yuedu/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.yuedu;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		2859248F9C0B74970C285987 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		33DCAD629C086158D98E0272 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.yuedu.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Yuedu.app/Yuedu";
+			};
+			name = Debug;
+		};
+		3C7975E1B56F10EEEB359C47 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8E404E31E0C35DF4DDC85FF3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Yuedu/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.yuedu;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9FB9007C86B176E2E0E2B56F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.yuedu.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Yuedu.app/Yuedu";
+			};
+			name = Release;
+		};
+		B1FEF90E5B4E4AB443940468 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.yuedu.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Yuedu;
+			};
+			name = Release;
+		};
+		F721B2295A874ECBFAEE53FC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.yuedu.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Yuedu;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0020F6EA408054AF59B3A900 /* Build configuration list for PBXNativeTarget "YueduTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				33DCAD629C086158D98E0272 /* Debug */,
+				9FB9007C86B176E2E0E2B56F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6FF6F8D114BAB0608AC414F9 /* Build configuration list for PBXProject "Yuedu" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2859248F9C0B74970C285987 /* Debug */,
+				3C7975E1B56F10EEEB359C47 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		751F7F2242A2399EE7E1B737 /* Build configuration list for PBXNativeTarget "YueduUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F721B2295A874ECBFAEE53FC /* Debug */,
+				B1FEF90E5B4E4AB443940468 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C7217D397372F246F76305D5 /* Build configuration list for PBXNativeTarget "Yuedu" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E404E31E0C35DF4DDC85FF3 /* Debug */,
+				15BF3AE451008E7724F84511 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 98183A2D2BE8F7EAFD2C0805 /* Project object */;
+}

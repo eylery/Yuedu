@@ -1,0 +1,21 @@
+{
+  "bookSourceName": "本地测试书源",
+  "bookSourceUrl": "http://localhost:8080",
+  "bookSourceGroup": "示例 · 需自行启动服务",
+  "enabled": false,
+  "searchUrl": "/search?q={{key}}&page={{page}}",
+  "ruleSearch": {
+    "bookList": "$.books[*]",
+    "name": "$.name",
+    "author": "$.author",
+    "bookUrl": "$.url",
+    "intro": "$.intro"
+  },
+  "ruleBookInfo": { "tocUrl": "$.tocUrl" },
+  "ruleToc": {
+    "chapterList": "$.chapters[*]",
+    "chapterName": "$.title",
+    "chapterUrl": "$.url"
+  },
+  "ruleContent": { "content": "$.content" }
+}

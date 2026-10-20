@@ -1,0 +1,33 @@
+{
+  "check": "static-rule-syntax-smoke",
+  "generatedAtUTC": "2026-09-24T04:59:39+00:00",
+  "collectionBytes": 2234302,
+  "collectionSHA256": "135282482326be10dade5c13422140590a43f00347fec000250caa2af994defa",
+  "rulesSHA256": "0b551acedc551c345be14cf9b275886dcf887b3b3aff5402b4c0e8dbf60952d0",
+  "sourceEntries": 391,
+  "counts": {
+    "textSources": 342,
+    "candidateFields": 5768,
+    "jsonFixtures": 460,
+    "excludedScriptFields": 417,
+    "excludedTemplateFields": 152,
+    "htmlFixtures": 4658,
+    "excludedLegacyJSONTemplates": 17,
+    "excludedVariableFields": 81,
+    "otherTypeSources": 49,
+    "selectedFields": 5118
+  },
+  "result": {
+    "tested": 5118,
+    "errorCount": 0,
+    "blockedScriptCalls": 0,
+    "errors": [],
+    "errorsTruncated": false
+  },
+  "limitations": [
+    "Only synthetic HTML/JSON is used. Passing does not prove that rules match real websites or yield correct books/chapters.",
+    "Source JavaScript, variables, and both {{...}} and {$...} templates are excluded. No site requests are made.",
+    "Missing-node results may be empty; input-type inference is heuristic. This is a syntax smoke test, not full Legado conformance.",
+    "Reports contain only counts, hashes, field paths, and fixed error categories; never raw rules, headers, scripts, URLs, or credentials."
+  ]
+}
