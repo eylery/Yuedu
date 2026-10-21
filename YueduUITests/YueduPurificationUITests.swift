@@ -66,7 +66,7 @@ final class YueduPurificationUITests: XCTestCase {
         try expect(body, contains: "净化测试广告")
         app.scrollViews["reader.content"].swipeUp()
         app.buttons["reader.addBookmark"].tap()
-        let progressBeforeCleaning = app.staticTexts["reader.progress"].label
+        let progressBeforeCleaning = yueduReadingInfo(app)
         try openTools(app)
         app.navigationBars["正文净化"].buttons["添加净化规则"].tap()
         app.buttons["自定义替换规则"].tap()
@@ -100,7 +100,7 @@ final class YueduPurificationUITests: XCTestCase {
         returnToReader(app)
         try expect(body, contains: "正文应始终保留")
         try expect(body, contains: "净化测试广告", present: false)
-        XCTAssertEqual(app.staticTexts["reader.progress"].label, progressBeforeCleaning)
+        XCTAssertEqual(yueduReadingInfo(app), progressBeforeCleaning)
         XCTAssertEqual(app.buttons["reader.addBookmark"].label, "移除此处书签")
         app.buttons["reader.settings"].tap()
         let slide = app.buttons["平移翻页"]

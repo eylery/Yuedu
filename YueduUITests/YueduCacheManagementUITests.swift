@@ -109,7 +109,7 @@ final class YueduCacheManagementUITests: XCTestCase {
         app.buttons["阅读本章"].tap()
         try expectText(app.staticTexts["reader.text"], "第3章缓存管理正文")
         app.scrollViews["reader.content"].swipeUp()
-        let progress = app.staticTexts["reader.progress"].label
+        let progress = yueduReadingInfo(app)
         try openCache(app)
         try tap(app.cells["cache.action.6"], in: table)
         try require(app.alerts["清理已读章节缓存"])
@@ -128,7 +128,7 @@ final class YueduCacheManagementUITests: XCTestCase {
         app.tabBars.buttons["书架"].tap()
         app.buttons["shelf.continue"].tap()
         try expectText(app.staticTexts["reader.text"], "第3章缓存管理正文")
-        XCTAssertEqual(app.staticTexts["reader.progress"].label, progress)
+        XCTAssertEqual(yueduReadingInfo(app), progress)
         app.buttons["reader.bookmarks"].tap()
         try require(app.cells.staticTexts["第1章 缓存测试"])
         app.cells.staticTexts["第1章 缓存测试"].tap()

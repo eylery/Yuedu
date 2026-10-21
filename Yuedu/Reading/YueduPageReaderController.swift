@@ -5,6 +5,7 @@ import CoreText
 final class YueduPageReaderController: UIViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
     var onPositionChanged: (() -> Void)?
     var onChapterTurn: ((Int) -> Void)?
+    var onCenterTap: (() -> Void)?
     private let controller = UIPageViewController(
         transitionStyle: .scroll,
         navigationOrientation: .horizontal
@@ -20,10 +21,16 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
     private var canGoForward = false
     private var transitioning = false
     private var pendingUpdate: (() -> Void)?
-    private let pageInsets = UIEdgeInsets(top: 20, left: 28, bottom: 32, right: 28)
+    private var requestedInsets = UIEdgeInsets(top: 20, left: 28, bottom: 32, right: 28)
+    private var minimumContentSize = CGSize(width: 84, height: 60)
+    private var pageInsets: UIEdgeInsets {
+        YueduTypography.fittedPageInsets(requestedInsets, viewport: view.bounds.size, minimumContent: minimumContentSize)
+    }
 
     var isReady: Bool { !ranges.isEmpty && layoutSize == contentSize }
     var fraction: Double { ranges.count > 1 ? Double(pageIndex) / Double(ranges.count - 1) : 1 }
+    var currentPageNumber: Int { pageIndex + 1 }
+    var totalPageCount: Int { ranges.count }
     var pageDescription: String { "\(pageIndex + 1)/\(max(1, ranges.count)) 页" }
 
     override func viewDidLoad() {
@@ -39,11 +46,13 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
         view.addGestureRecognizer(tap)
     }
 
-    func configure(text: NSAttributedString, paper: ReaderPreferences.Paper, fraction: Double,
+    func configure(text: NSAttributedString, paper: ReaderPreferences.Paper, insets: UIEdgeInsets, fraction: Double,
+                   minimumContentSize: CGSize,
                    preservePosition: Bool, hasPrevious: Bool, hasNext: Bool) {
         if transitioning {
             pendingUpdate = { [weak self] in
-                self?.configure(text: text, paper: paper, fraction: fraction,
+                self?.configure(text: text, paper: paper, insets: insets, fraction: fraction,
+                                minimumContentSize: minimumContentSize,
                                 preservePosition: preservePosition, hasPrevious: hasPrevious, hasNext: hasNext)
             }
             return
@@ -52,6 +61,8 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
             ? ranges[pageIndex].location : nil
         self.text = text
         self.paper = paper
+        requestedInsets = insets
+        self.minimumContentSize = minimumContentSize
         initialFraction = fraction
         canGoBack = hasPrevious
         canGoForward = hasNext
@@ -85,7 +96,9 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
 
     private func page(at index: Int) -> YueduPaperPage {
         if ranges.indices.contains(index) {
-            return YueduPaperPage(index: index, text: text, range: ranges[index], paper: paper, insets: pageInsets)
+            let page = YueduPaperPage(index: index, text: text, range: ranges[index], paper: paper, insets: pageInsets)
+            page.onToggleFullScreen = { [weak self] in self?.onCenterTap?() }
+            return page
         }
         let title = index < 0 ? "上一章" : "下一章"
         let content = NSAttributedString(string: title, attributes: [
@@ -138,9 +151,11 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
     }
 
     @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
+        guard !transitioning else { return }
         let x = recognizer.location(in: view).x
         if x < view.bounds.width * 0.3 { turn(-1) }
         else if x > view.bounds.width * 0.7 { turn(1) }
+        else { onCenterTap?() }
     }
 
     func turn(_ direction: Int) {
@@ -157,6 +172,7 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
 
 private final class YueduPaperPage: UIViewController {
     let index: Int
+    var onToggleFullScreen: (() -> Void)?
     private let text: NSAttributedString
     private let range: NSRange
     private let paper: ReaderPreferences.Paper
@@ -185,6 +201,10 @@ private final class YueduPaperPage: UIViewController {
         canvas.accessibilityIdentifier = "reader.pageText"
         canvas.accessibilityLabel = (text.string as NSString).substring(with: range)
         canvas.accessibilityTraits = .staticText
+        canvas.accessibilityCustomActions = [UIAccessibilityCustomAction(name: "切换全屏阅读") { [weak self] _ in
+            self?.onToggleFullScreen?()
+            return true
+        }]
         view = canvas
     }
 }
@@ -195,7 +215,12 @@ private final class YueduPaperCanvas: UIView {
     var insets = UIEdgeInsets.zero
 
     override func draw(_ rect: CGRect) {
-        guard let context = UIGraphicsGetCurrentContext(), range.length > 0 else { return }
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        // A reused opaque canvas must erase the previous glyphs before drawing
+        // after rotation or a viewport change.
+        context.setFillColor((backgroundColor ?? .clear).cgColor)
+        context.fill(bounds)
+        guard range.length > 0 else { return }
         let area = bounds.inset(by: insets)
         context.saveGState()
         context.translateBy(x: area.minX, y: area.maxY)

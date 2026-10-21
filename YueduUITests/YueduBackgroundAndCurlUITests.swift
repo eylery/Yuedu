@@ -27,7 +27,7 @@ final class YueduBackgroundAndCurlUITests: XCTestCase {
         expect(page, predicate: NSPredicate(format: "label == %@", initialText))
         paper.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         expect(page, predicate: NSPredicate(format: "label != %@", initialText))
-        XCTAssertTrue(app.staticTexts["reader.progress"].label.contains("页"))
+        XCTAssertTrue(yueduReadingInfo(app, identifier: "reader.pageInfo").contains("页"))
         app.buttons["reader.addBookmark"].tap()
         screenshot(app, "Horizontal slide second page")
 
@@ -43,12 +43,12 @@ final class YueduBackgroundAndCurlUITests: XCTestCase {
         // paper opens the next chapter rather than an empty trailing page.
         paper.swipeLeft()
         for _ in 0..<8 {
-            if app.staticTexts["reader.progress"].label.contains("第 2 /") { break }
+            if yueduReadingInfo(app, identifier: "reader.chapterInfo").contains("第 2 章") { break }
             paper.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         }
-        XCTAssertTrue(app.staticTexts["reader.progress"].label.contains("第 2 /"))
+        XCTAssertTrue(yueduReadingInfo(app, identifier: "reader.chapterInfo").contains("第 2 章"))
         paper.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
-        expect(app.staticTexts["reader.progress"], predicate: NSPredicate(format: "label CONTAINS %@", "第 1 /"))
+        XCTAssertTrue(yueduReadingInfo(app, identifier: "reader.chapterInfo").contains("第 1 章"))
         screenshot(app, "Reverse slide returns to previous chapter")
 
         app.buttons["reader.settings"].tap()
@@ -60,7 +60,7 @@ final class YueduBackgroundAndCurlUITests: XCTestCase {
         night.tap()
         app.buttons["完成"].tap()
         try require(page)
-        XCTAssertTrue(app.staticTexts["reader.progress"].label.contains("第 1 /"))
+        XCTAssertTrue(yueduReadingInfo(app, identifier: "reader.chapterInfo").contains("第 1 章"))
         screenshot(app, "Large type on dark paper")
         let savedText = page.label
         app.terminate()

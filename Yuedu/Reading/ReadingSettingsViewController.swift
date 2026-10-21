@@ -13,9 +13,13 @@ final class ReadingSettingsViewController: UIViewController {
     private let fontValue = UILabel()
     private let spacingValue = UILabel()
     private var themeButtons: [UIButton] = []
+    private var sliders: [String: UISlider] = [:]
+    private let typographyButton = UIButton(type: .system)
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        preferences = ReaderPreferences.load()
+        updatePreview()
         navigationController?.setNavigationBarHidden(false, animated: animated)
         // UIKit may load this view while constructing the navigation controller,
         // before that controller has a presenter. Decide once presentation begins.
@@ -30,6 +34,7 @@ final class ReadingSettingsViewController: UIViewController {
         view.backgroundColor = Theme.bg
         navigationItem.largeTitleDisplayMode = .never
         let scrollView = UIScrollView()
+        scrollView.accessibilityIdentifier = "readingSettings.content"
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(scrollView)
         NSLayoutConstraint.activate([
@@ -85,9 +90,24 @@ final class ReadingSettingsViewController: UIViewController {
             textLabel("平移模式可左右滑动，也可轻点左右区域翻页。", size: 12, color: Theme.secondary)
         ], spacing: 12))
         stack.addArrangedSubview(sliderSection(title: "文字大小", symbol: "textformat.size", valueLabel: fontValue,
-                                              value: Float(preferences.fontSize), min: 16, max: 30, action: #selector(fontChanged(_:)), id: "fontSize"))
+                                              value: Float(preferences.fontSize), min: 14, max: 36, action: #selector(fontChanged(_:)), id: "fontSize"))
         stack.addArrangedSubview(sliderSection(title: "行间留白", symbol: "line.3.horizontal", valueLabel: spacingValue,
-                                              value: Float(preferences.lineSpacing), min: 4, max: 22, action: #selector(spacingChanged(_:)), id: "lineSpacing"))
+                                              value: Float(preferences.lineSpacing), min: 0, max: 24, action: #selector(spacingChanged(_:)), id: "lineSpacing"))
+        typographyButton.contentHorizontalAlignment = .leading
+        typographyButton.titleLabel?.numberOfLines = 2
+        typographyButton.accessibilityIdentifier = "readingSettings.typography"
+        typographyButton.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            let controller = YueduTypographyViewController()
+            controller.onChange = { [weak self] preferences in
+                self?.preferences = preferences
+                self?.updatePreview()
+                self?.onChange?(preferences)
+            }
+            self.navigationController?.pushViewController(controller, animated: true)
+            self.navigationController?.sheetPresentationController?.selectedDetentIdentifier = .large
+        }, for: .touchUpInside)
+        stack.addArrangedSubview(typographyButton)
         let themeSection = UIStackView()
         themeSection.axis = .vertical
         themeSection.spacing = 14
@@ -114,6 +134,17 @@ final class ReadingSettingsViewController: UIViewController {
         stack.addArrangedSubview(themeSection)
         stack.addArrangedSubview(sliderSection(title: "屏幕亮度", symbol: "sun.max", valueLabel: nil,
                                               value: Float(UIScreen.main.brightness), min: 0.05, max: 1, action: #selector(brightnessChanged(_:)), id: "brightness"))
+        stack.addArrangedSubview(vstack([
+            switchRow(title: "全屏阅读", id: "fullScreen", isOn: preferences.fullScreen) { [weak self] value in
+                self?.preferences.fullScreen = value
+                self?.changed()
+            },
+            switchRow(title: "全屏时显示状态栏", id: "fullScreenStatusBar", isOn: preferences.showsStatusBarInFullScreen) { [weak self] value in
+                self?.preferences.showsStatusBarInFullScreen = value
+                self?.changed()
+            },
+            textLabel("轻点正文中央可显示或隐藏功能栏。功能栏覆盖在正文上方，显隐不改变排版；正文始终按全屏安全区域显示。", size: 12, color: Theme.secondary)
+        ], spacing: 16))
         let note = UILabel()
         note.text = "文字、间距与纸张偏好会自动保存。\n留一点空白，让阅读慢下来。"
         note.font = .systemFont(ofSize: 12)
@@ -129,6 +160,22 @@ final class ReadingSettingsViewController: UIViewController {
         label.font = .systemFont(ofSize: 14, weight: .semibold)
         label.textColor = Theme.ink
         return label
+    }
+
+    private func switchRow(title: String, id: String, isOn: Bool, onChange: @escaping (Bool) -> Void) -> UIView {
+        let toggle = UISwitch()
+        toggle.isOn = isOn
+        toggle.onTintColor = Theme.accent
+        toggle.accessibilityLabel = title
+        toggle.accessibilityIdentifier = "readingSettings.\(id)"
+        toggle.addAction(UIAction { [weak toggle] _ in
+            guard let toggle else { return }
+            onChange(toggle.isOn)
+        }, for: .valueChanged)
+        let row = UIStackView(arrangedSubviews: [sectionTitle(title), toggle])
+        row.alignment = .center
+        row.spacing = 12
+        return row
     }
 
     private func sliderSection(title: String, symbol: String, valueLabel: UILabel?, value: Float, min: Float, max: Float, action: Selector, id: String) -> UIView {
@@ -155,10 +202,12 @@ final class ReadingSettingsViewController: UIViewController {
         slider.minimumValue = min
         slider.maximumValue = max
         slider.value = value
+        slider.isContinuous = id == "brightness"
         slider.tintColor = Theme.accent
         slider.accessibilityLabel = title
         slider.accessibilityIdentifier = "readingSettings.\(id)"
         slider.addTarget(self, action: action, for: .valueChanged)
+        sliders[id] = slider
         sliderRow.addArrangedSubview(icon)
         sliderRow.addArrangedSubview(slider)
         section.addArrangedSubview(sliderRow)
@@ -168,6 +217,9 @@ final class ReadingSettingsViewController: UIViewController {
     private func updatePreview() {
         fontValue.text = "\(Int(preferences.fontSize)) pt"
         spacingValue.text = "\(Int(preferences.lineSpacing)) pt"
+        sliders["fontSize"]?.value = Float(preferences.fontSize)
+        sliders["lineSpacing"]?.value = Float(preferences.lineSpacing)
+        typographyButton.setTitle("字体与排版  ›\n\(preferences.typography.fontTitle) · 字距、段距、缩进与页边距", for: .normal)
         previewCard.backgroundColor = preferences.paper.background
         previewCard.layer.borderColor = preferences.paper.rule.cgColor
         preview.attributedText = preferences.attributedText("日光从树叶间落下来，\n翻过一页，又是一个世界。", size: min(preferences.fontSize, 25))

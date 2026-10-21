@@ -8,7 +8,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         if ProcessInfo.processInfo.arguments.contains("--uitesting-reset") {
             let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Yuedu")
             try? FileManager.default.removeItem(at: directory)
-            for key in ["reader.fontSize", "reader.lineSpacing", "reader.paper", "reader.turnStyle", "shelf.sort", "shelf.showSamples", "following.autoCheck", "search.history"] {
+            for key in ["reader.fontSize", "reader.lineSpacing", "reader.paper", "reader.turnStyle", "reader.fullScreen", "reader.fullScreenStatusBar", "reader.typography", "shelf.sort", "shelf.showSamples", "following.autoCheck", "search.history"] {
                 UserDefaults.standard.removeObject(forKey: key)
             }
         }
@@ -60,6 +60,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
 final class MainTabBarController: UITabBarController {
     let bookshelf = BookshelfViewController()
+    override var childForStatusBarStyle: UIViewController? { selectedViewController }
+    override var childForStatusBarHidden: UIViewController? { selectedViewController }
+    override var childForHomeIndicatorAutoHidden: UIViewController? { selectedViewController }
     override func viewDidLoad() {
         super.viewDidLoad()
         let screens: [(UIViewController, String, String, String)] = [
@@ -96,4 +99,6 @@ final class MainTabBarController: UITabBarController {
 
 final class ReadingNavigationController: UINavigationController {
     override var childForStatusBarStyle: UIViewController? { topViewController }
+    override var childForStatusBarHidden: UIViewController? { topViewController }
+    override var childForHomeIndicatorAutoHidden: UIViewController? { topViewController }
 }

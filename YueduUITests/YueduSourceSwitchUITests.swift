@@ -78,7 +78,7 @@ final class YueduSourceSwitchUITests: XCTestCase {
         let app = try await launchFixture()
         app.scrollViews["reader.content"].swipeUp()
         app.buttons["reader.addBookmark"].tap()
-        let originalProgress = app.staticTexts["reader.progress"].label
+        let originalProgress = yueduReadingInfo(app)
         app.buttons["reader.nextChapter"].tap()
         try require(app.buttons["reader.switchSource"])
         app.buttons["reader.switchSource"].tap()
@@ -141,7 +141,7 @@ final class YueduSourceSwitchUITests: XCTestCase {
         try require(app.navigationBars["已保存版本"])
         app.cells.staticTexts["换源测试·原源"].tap()
         try contains(app.staticTexts["reader.text"], "原版本初见正文")
-        XCTAssertEqual(app.staticTexts["reader.progress"].label, originalProgress)
+        XCTAssertEqual(yueduReadingInfo(app), originalProgress)
         app.buttons["reader.bookmarks"].tap()
         try require(app.cells.staticTexts["第一章 初见"].firstMatch)
     }

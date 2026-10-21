@@ -1,7 +1,7 @@
 import UIKit
 import AVFoundation
 
-final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpeechSynthesizerDelegate, UIAdaptivePresentationControllerDelegate {
+final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpeechSynthesizerDelegate, UIAdaptivePresentationControllerDelegate, UIGestureRecognizerDelegate {
     private let bookID: UUID
     private var preferences = ReaderPreferences.load()
     private var chapterIndex = 0
@@ -24,6 +24,22 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private var sessionTimer: Timer?
     private let synthesizer = AVSpeechSynthesizer()
 
+    private static let readingInfoHeight: CGFloat = 28
+    private let readingInfoBackground = UIView()
+    private let readingInfoBar = UIStackView()
+    private let chapterInfoLabel = UILabel()
+    private let pageInfoLabel = UILabel()
+    private let readingLayer = UIView()
+    private let readingSurface = UIView()
+    private let chromeOverlay = YueduReadingChromeOverlay()
+    private var viewportConstraints: [NSLayoutConstraint] = []
+    private var viewportSize = CGSize.zero
+    private var viewportOrientation: UIInterfaceOrientation = .unknown
+    private weak var viewportWindow: UIWindow?
+    private let topBarBackground = UIView()
+    private let footerBackground = UIView()
+    private let topBarSeparator = UIView()
+    private let footerSeparator = UIView()
     private let topBar = UIView()
     private let backButton = UIButton(type: .system)
     private let bookmarkButton = UIButton(type: .system)
@@ -33,6 +49,11 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private let scrollView = UIScrollView()
     private let pageReader = YueduPageReaderController()
     private let contentStack = UIStackView()
+    private var contentTopConstraint: NSLayoutConstraint?
+    private var contentLeadingConstraint: NSLayoutConstraint?
+    private var contentTrailingConstraint: NSLayoutConstraint?
+    private var contentBottomConstraint: NSLayoutConstraint?
+    private var contentWidthConstraint: NSLayoutConstraint?
     private let chapterNumber = UILabel()
     private let chapterTitle = UILabel()
     private let bodyLabel = UILabel()
@@ -44,8 +65,6 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private let retryButton = UIButton(type: .system)
     private let switchSourceButton = UIButton(type: .system)
     private let footer = UIView()
-    private let progressView = UIProgressView(progressViewStyle: .bar)
-    private let progressLabel = UILabel()
     private let previousButton = UIButton(type: .system)
     private let nextButton = UIButton(type: .system)
     private let listenButton = UIButton(type: .system)
@@ -73,6 +92,11 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle { preferences.paper == .night ? .lightContent : .darkContent }
+    override var prefersStatusBarHidden: Bool {
+        preferences.fullScreen && !preferences.showsStatusBarInFullScreen && !readingToolsOpen
+    }
+    override var prefersHomeIndicatorAutoHidden: Bool { preferences.fullScreen && !readingToolsOpen }
+    override var preferredStatusBarUpdateAnimation: UIStatusBarAnimation { .none }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -91,8 +115,6 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
             bookLabel.text = book?.title ?? "书籍不可用"
             chapterNumber.isHidden = true
             chapterTitle.text = book == nil ? "书籍不可用" : "暂无章节"
-            progressLabel.text = "暂无阅读进度"
-            progressView.progress = 0
             setStatus(book == nil ? "这本书已不在书架中，请返回书架选择其他书籍。" : "这本书还没有可阅读的章节。", loading: false, retry: false)
             previousButton.isEnabled = false
             nextButton.isEnabled = false
@@ -104,7 +126,9 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         super.viewWillAppear(animated)
         previousNavigationBarHidden = navigationController?.isNavigationBarHidden ?? false
         navigationController?.setNavigationBarHidden(true, animated: animated)
+        updateReadingViewport()
         applyPreferences(ReaderPreferences.load())
+        updateSystemBars()
         if hasAppeared, let book {
             showChapter(at: book.progress.chapterIndex, fraction: book.progress.scrollFraction, saveCurrent: false)
         }
@@ -112,8 +136,18 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        if !hasAppeared {
+            // Navigation and status bars can change the safe area several times
+            // during the first presentation. Restore once in the settled viewport.
+            pendingFraction = book?.progress.scrollFraction ?? 0
+            if contentAvailable {
+                configurePages(preservePosition: false)
+                restorePositionIfNeeded()
+            }
+        }
         hasAppeared = true
         isVisible = true
+        persistProgress()
         startReadingSession()
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.finishReadingSession()
@@ -137,6 +171,29 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         restorePositionIfNeeded()
+        updateBottomReadingInfo()
+    }
+
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        updateReadingViewport()
+    }
+
+    private func updateReadingViewport() {
+        guard !viewportConstraints.isEmpty, view.bounds.width > 0, view.bounds.height > 0 else { return }
+        let window = view.window
+        let orientation = window?.windowScene?.interfaceOrientation ?? .unknown
+        guard viewportSize != view.bounds.size || viewportOrientation != orientation || viewportWindow !== window else { return }
+        // Sample the window's full-screen safe area only when its geometry changes.
+        // Navigation bars, sheets and status-bar visibility must not resize the text.
+        let insets = window?.safeAreaInsets ?? view.safeAreaInsets
+        if contentAvailable, pendingFraction == nil { pendingFraction = currentFraction }
+        viewportSize = view.bounds.size
+        viewportOrientation = orientation
+        viewportWindow = window
+        for (constraint, constant) in zip(viewportConstraints, [insets.top, insets.left, -insets.bottom - Self.readingInfoHeight, -insets.right]) {
+            constraint.constant = constant
+        }
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -151,44 +208,84 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     private func buildInterface() {
         view.accessibilityIdentifier = "reader.screen"
-        for child in [topBar, scrollView, footer] {
-            child.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(child)
+        readingSurface.accessibilityIdentifier = "reader.surface"
+        chromeOverlay.accessibilityIdentifier = "reader.chrome"
+        topBar.accessibilityIdentifier = "reader.topBar"
+        footer.accessibilityIdentifier = "reader.footer"
+        readingLayer.accessibilityIdentifier = "reader.readingLayer"
+        view.addSubview(readingLayer)
+        readingLayer.pinEdges(to: view)
+        readingSurface.translatesAutoresizingMaskIntoConstraints = false
+        readingLayer.addSubview(readingSurface)
+        view.addSubview(chromeOverlay)
+        viewportConstraints = [
+            readingSurface.topAnchor.constraint(equalTo: view.topAnchor),
+            readingSurface.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            readingSurface.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            readingSurface.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ]
+        NSLayoutConstraint.activate(viewportConstraints)
+        chromeOverlay.pinEdges(to: view)
+        buildReadingInfoBar()
+        for background in [topBarBackground, footerBackground] {
+            background.translatesAutoresizingMaskIntoConstraints = false
+            background.isUserInteractionEnabled = false
+            chromeOverlay.addSubview(background)
+        }
+        for bar in [topBar, footer] {
+            bar.translatesAutoresizingMaskIntoConstraints = false
+            chromeOverlay.addSubview(bar)
         }
         NSLayoutConstraint.activate([
             topBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            topBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            topBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             topBar.heightAnchor.constraint(equalToConstant: 64),
-            footer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            footer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            footer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            scrollView.topAnchor.constraint(equalTo: topBar.bottomAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor)
+            footer.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
         ])
-        addChild(pageReader)
-        view.addSubview(pageReader.view)
-        pageReader.view.translatesAutoresizingMaskIntoConstraints = false
+        // Extend the chrome color through the status and home-indicator areas,
+        // while keeping all controls at their existing safe-area positions.
         NSLayoutConstraint.activate([
-            pageReader.view.topAnchor.constraint(equalTo: scrollView.topAnchor),
-            pageReader.view.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
-            pageReader.view.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
-            pageReader.view.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor)
+            topBarBackground.topAnchor.constraint(equalTo: chromeOverlay.topAnchor),
+            topBarBackground.leadingAnchor.constraint(equalTo: chromeOverlay.leadingAnchor),
+            topBarBackground.trailingAnchor.constraint(equalTo: chromeOverlay.trailingAnchor),
+            topBarBackground.bottomAnchor.constraint(equalTo: topBar.bottomAnchor),
+            footerBackground.topAnchor.constraint(equalTo: footer.topAnchor),
+            footerBackground.leadingAnchor.constraint(equalTo: chromeOverlay.leadingAnchor),
+            footerBackground.trailingAnchor.constraint(equalTo: chromeOverlay.trailingAnchor),
+            footerBackground.bottomAnchor.constraint(equalTo: chromeOverlay.bottomAnchor)
         ])
+        for (separator, background) in [(topBarSeparator, topBarBackground), (footerSeparator, footerBackground)] {
+            separator.translatesAutoresizingMaskIntoConstraints = false
+            background.addSubview(separator)
+            NSLayoutConstraint.activate([
+                separator.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+                separator.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+                separator.heightAnchor.constraint(equalToConstant: 0.5)
+            ])
+        }
+        topBarSeparator.bottomAnchor.constraint(equalTo: topBarBackground.bottomAnchor).isActive = true
+        footerSeparator.topAnchor.constraint(equalTo: footerBackground.topAnchor).isActive = true
+        readingSurface.addSubview(scrollView)
+        scrollView.pinEdges(to: readingSurface)
+        addChild(pageReader)
+        readingSurface.addSubview(pageReader.view)
+        pageReader.view.pinEdges(to: readingSurface)
         pageReader.didMove(toParent: self)
         pageReader.view.isHidden = true
         pageReader.onPositionChanged = { [weak self] in
             guard let self, self.contentAvailable, self.preferences.turnStyle == .slide else { return }
             self.restorePositionIfNeeded()
             self.updateProgressDisplay()
-            if !self.isChangingSize { self.persistProgress() }
+            if !self.isChangingSize && !self.isRestoring { self.persistProgress() }
         }
         pageReader.onChapterTurn = { [weak self] direction in
             guard let self else { return }
             self.showChapter(at: self.chapterIndex + direction, fraction: direction < 0 ? 1 : 0)
         }
+        pageReader.onCenterTap = { [weak self] in self?.toggleFullScreen() }
         configureIcon(backButton, symbol: "chevron.left", label: "返回书架", id: "back", action: #selector(goBack))
         configureIcon(bookmarkButton, symbol: "bookmark", label: "添加书签", id: "addBookmark", action: #selector(toggleBookmark))
         configureIcon(detailsButton, symbol: "ellipsis", label: "书籍详情与缓存", id: "details", action: #selector(openDetails))
@@ -222,17 +319,21 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         scrollView.alwaysBounceVertical = true
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.accessibilityIdentifier = "reader.content"
+        let contentTap = UITapGestureRecognizer(target: self, action: #selector(contentTapped(_:)))
+        contentTap.delegate = self
+        contentTap.cancelsTouchesInView = false
+        scrollView.addGestureRecognizer(contentTap)
         contentStack.axis = .vertical
         contentStack.spacing = 22
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         scrollView.addSubview(contentStack)
-        NSLayoutConstraint.activate([
-            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 26),
-            contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: 28),
-            contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -28),
-            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -40),
-            contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -56)
-        ])
+        contentTopConstraint = contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor)
+        contentLeadingConstraint = contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor)
+        contentTrailingConstraint = contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor)
+        contentBottomConstraint = contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor)
+        contentWidthConstraint = contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor)
+        NSLayoutConstraint.activate([contentTopConstraint, contentLeadingConstraint, contentTrailingConstraint,
+                                     contentBottomConstraint, contentWidthConstraint].compactMap { $0 })
         chapterNumber.font = .systemFont(ofSize: 10, weight: .semibold)
         chapterTitle.font = .readingSerif(28)
         chapterTitle.numberOfLines = 0
@@ -240,6 +341,10 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         chapterTitle.accessibilityIdentifier = "reader.chapterTitle"
         bodyLabel.numberOfLines = 0
         bodyLabel.accessibilityIdentifier = "reader.text"
+        bodyLabel.accessibilityCustomActions = [UIAccessibilityCustomAction(name: "切换全屏阅读") { [weak self] _ in
+            self?.toggleFullScreen()
+            return true
+        }]
         endLabel.font = .systemFont(ofSize: 11)
         endLabel.textAlignment = .center
         endLabel.text = "—  本 章 完  —"
@@ -278,7 +383,62 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         chapterEndButton.accessibilityIdentifier = "reader.nextChapterAtEnd"
         chapterEndButton.addTarget(self, action: #selector(nextChapter), for: .touchUpInside)
         contentStack.addArrangedSubview(chapterEndButton)
+        applyTypographyLayout()
         buildFooter()
+    }
+
+    private func buildReadingInfoBar() {
+        readingInfoBackground.translatesAutoresizingMaskIntoConstraints = false
+        readingInfoBackground.isUserInteractionEnabled = false
+        readingInfoBar.translatesAutoresizingMaskIntoConstraints = false
+        readingInfoBar.alignment = .center
+        readingInfoBar.spacing = 12
+        readingInfoBar.isUserInteractionEnabled = false
+        readingInfoBar.accessibilityIdentifier = "reader.bottomInfo"
+        chapterInfoLabel.font = .systemFont(ofSize: 11)
+        chapterInfoLabel.lineBreakMode = .byTruncatingMiddle
+        chapterInfoLabel.accessibilityIdentifier = "reader.chapterInfo"
+        chapterInfoLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        pageInfoLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        pageInfoLabel.textAlignment = .right
+        pageInfoLabel.accessibilityIdentifier = "reader.pageInfo"
+        pageInfoLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        pageInfoLabel.setContentHuggingPriority(.required, for: .horizontal)
+        readingInfoBar.addArrangedSubview(chapterInfoLabel)
+        readingInfoBar.addArrangedSubview(pageInfoLabel)
+        readingLayer.addSubview(readingInfoBackground)
+        readingLayer.addSubview(readingInfoBar)
+        NSLayoutConstraint.activate([
+            readingInfoBar.topAnchor.constraint(equalTo: readingSurface.bottomAnchor),
+            readingInfoBar.heightAnchor.constraint(equalToConstant: Self.readingInfoHeight),
+            readingInfoBar.leadingAnchor.constraint(equalTo: readingSurface.leadingAnchor, constant: 20),
+            readingInfoBar.trailingAnchor.constraint(equalTo: readingSurface.trailingAnchor, constant: -20),
+            readingInfoBackground.topAnchor.constraint(equalTo: readingInfoBar.topAnchor),
+            readingInfoBackground.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            readingInfoBackground.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            readingInfoBackground.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+    }
+
+    private func updateBottomReadingInfo() {
+        let chapterText = chapter.map { "第 \(chapterIndex + 1) 章 · \($0.title)" } ?? "暂无章节"
+        if chapterInfoLabel.text != chapterText { chapterInfoLabel.text = chapterText }
+        let pageText: String
+        if !contentAvailable {
+            pageText = "— / — 页"
+        } else if preferences.turnStyle == .slide {
+            pageText = pageReader.isReady ? "\(pageReader.currentPageNumber) / \(pageReader.totalPageCount) 页" : "— / — 页"
+        } else {
+            // Count screenfuls of the chapter itself, excluding end-of-chapter controls.
+            let chapterHeight = contentStack.convert(bodyLabel.frame, to: scrollView).maxY
+            let position = YueduReadingPagePosition.scrolling(
+                chapterHeight: chapterHeight,
+                viewportHeight: scrollView.bounds.height,
+                offset: scrollView.contentOffset.y
+            )
+            pageText = position.map { "\($0.current) / \($0.total) 页" } ?? "— / — 页"
+        }
+        if pageInfoLabel.text != pageText { pageInfoLabel.text = pageText }
     }
 
     private func buildFooter() {
@@ -290,20 +450,28 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 24),
             stack.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: footer.topAnchor, constant: 1),
+            stack.topAnchor.constraint(equalTo: footer.topAnchor, constant: 4),
             stack.bottomAnchor.constraint(equalTo: footer.bottomAnchor, constant: -4)
         ])
-        progressView.heightAnchor.constraint(equalToConstant: 1.5).isActive = true
-        stack.addArrangedSubview(progressView)
         configureIcon(previousButton, symbol: "chevron.left", label: "上一章", id: "previousChapter", action: #selector(previousChapter))
         configureIcon(nextButton, symbol: "chevron.right", label: "下一章", id: "nextChapter", action: #selector(nextChapter))
-        progressLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
-        progressLabel.textAlignment = .center
-        progressLabel.accessibilityIdentifier = "reader.progress"
-        let chapterRow = UIStackView(arrangedSubviews: [previousButton, progressLabel, nextButton])
+        let chapterRow = UIStackView(arrangedSubviews: [previousButton, UIView(), nextButton])
         chapterRow.alignment = .center
         for button in [previousButton, nextButton] {
-            button.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            var configuration = UIButton.Configuration.plain()
+            configuration.title = button === previousButton ? "上一章" : "下一章"
+            configuration.image = UIImage(systemName: button === previousButton ? "chevron.left" : "chevron.right",
+                                          withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .medium))
+            configuration.imagePlacement = button === previousButton ? .leading : .trailing
+            configuration.imagePadding = 5
+            configuration.contentInsets = .zero
+            configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+                var result = attributes
+                result.font = .systemFont(ofSize: 12, weight: .medium)
+                return result
+            }
+            button.configuration = configuration
+            button.widthAnchor.constraint(equalToConstant: 68).isActive = true
             button.heightAnchor.constraint(equalToConstant: 38).isActive = true
         }
         stack.addArrangedSubview(chapterRow)
@@ -311,7 +479,8 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         let bookmarks = makeTool(symbol: "bookmark", title: "书签", id: "bookmarks", action: #selector(openBookmarks))
         configureTool(listenButton, symbol: "headphones", title: "听书", id: "listen", action: #selector(openSpeechControls))
         let settings = makeTool(symbol: "textformat.size", title: "设置", id: "settings", action: #selector(openSettings))
-        toolButtons = [contents, bookmarks, listenButton, settings]
+        let fullScreen = makeTool(symbol: "arrow.up.left.and.arrow.down.right", title: "全屏", id: "fullScreen", action: #selector(toggleFullScreen))
+        toolButtons = [contents, bookmarks, listenButton, fullScreen, settings]
         let tools = UIStackView(arrangedSubviews: toolButtons)
         tools.distribution = .fillEqually
         tools.heightAnchor.constraint(equalToConstant: 48).isActive = true
@@ -455,6 +624,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         else if !result.hits.isEmpty { sourceLabel.text = "已净化 \(result.hits.values.reduce(0, +)) 处 · 原文已保留" }
         else { sourceLabel.text = "把时间，留给阅读" }
         contentAvailable = true
+        applyTypographyLayout()
         bodyLabel.attributedText = preferences.attributedText(displayedBody)
         bodyLabel.isHidden = false
         endLabel.isHidden = false
@@ -463,6 +633,10 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         activity.stopAnimating()
         bookmarkButton.isEnabled = true
         listenButton.isEnabled = true
+        // Resolve the full-screen/safe-area viewport before applying the saved
+        // page fraction. A temporary smaller frame would choose a different page.
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
         configurePages(preservePosition: false)
         view.setNeedsLayout()
         view.layoutIfNeeded()
@@ -492,6 +666,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         isRestoring = true
         scrollView.setContentOffset(.zero, animated: false)
         isRestoring = false
+        updateBottomReadingInfo()
     }
 
     private var currentFraction: Double {
@@ -528,19 +703,12 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     }
 
     private func persistProgress() {
-        guard contentAvailable, chapter != nil else { return }
+        guard hasAppeared, contentAvailable, chapter != nil else { return }
         LibraryStore.shared.updateProgress(bookID: bookID, chapterIndex: chapterIndex, scrollFraction: currentFraction)
     }
 
     private func updateProgressDisplay() {
-        guard let book, !book.chapters.isEmpty else { return }
-        let fraction = currentFraction
-        let overall = (Double(chapterIndex) + fraction) / Double(book.chapters.count)
-        progressView.progress = Float(overall)
-        progressLabel.text = "第 \(chapterIndex + 1) / \(book.chapters.count) 章    ·    \(Int(overall * 100))%"
-        if preferences.turnStyle == .slide, contentAvailable {
-            progressLabel.text! += "    ·    \(pageReader.pageDescription)"
-        }
+        updateBottomReadingInfo()
         let hasBookmark = nearbyBookmark != nil
         bookmarkButton.setImage(UIImage(systemName: hasBookmark ? "bookmark.fill" : "bookmark"), for: .normal)
         bookmarkButton.accessibilityLabel = hasBookmark ? "移除此处书签" : "添加书签"
@@ -568,10 +736,22 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     }
 
     private func applyPreferences(_ preferences: ReaderPreferences) {
+        let contentChanged = self.preferences.fontSize != preferences.fontSize
+            || self.preferences.lineSpacing != preferences.lineSpacing
+            || self.preferences.typography != preferences.typography
+            || self.preferences.paper != preferences.paper
+            || self.preferences.turnStyle != preferences.turnStyle
+        guard contentChanged else {
+            self.preferences = preferences
+            applyReadingChrome()
+            return
+        }
         if contentAvailable { pendingFraction = currentFraction }
         isRestoring = true
         let preservePage = self.preferences.turnStyle == .slide
         self.preferences = preferences
+        applyReadingChrome()
+        applyTypographyLayout()
         if contentAvailable { bodyLabel.attributedText = preferences.attributedText(displayedBody) }
         if contentAvailable { configurePages(preservePosition: preservePage) }
         applyPalette()
@@ -581,6 +761,67 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         scrollView.layoutIfNeeded()
         isRestoring = false
         restorePositionIfNeeded()
+        if isVisible, contentAvailable { persistProgress() }
+    }
+
+    private func applyReadingChrome() {
+        chromeOverlay.isHidden = preferences.fullScreen
+        readingInfoBar.accessibilityElementsHidden = !preferences.fullScreen
+        updateSystemBars()
+    }
+
+    private func applyTypographyLayout() {
+        let insets = preferences.typography.insets
+        contentTopConstraint?.constant = insets.top
+        contentLeadingConstraint?.constant = insets.left
+        contentTrailingConstraint?.constant = -insets.right
+        contentBottomConstraint?.constant = -insets.bottom
+        contentWidthConstraint?.constant = -insets.left - insets.right
+        chapterTitle.font = preferences.typography.font(size: preferences.titleFontSize)
+        chapterTitle.textAlignment = preferences.typography.centeredTitle ? .center : .left
+        if let chapter {
+            chapterTitle.attributedText = preferences.attributedText(chapter.title, size: preferences.titleFontSize, isTitle: true)
+        }
+        contentStack.setCustomSpacing(preferences.typography.paragraphSpacing + 8, after: chapterTitle)
+    }
+
+    private func updateSystemBars() {
+        setNeedsStatusBarAppearanceUpdate()
+        navigationController?.setNeedsStatusBarAppearanceUpdate()
+        tabBarController?.setNeedsStatusBarAppearanceUpdate()
+        setNeedsUpdateOfHomeIndicatorAutoHidden()
+        navigationController?.setNeedsUpdateOfHomeIndicatorAutoHidden()
+        tabBarController?.setNeedsUpdateOfHomeIndicatorAutoHidden()
+    }
+
+    @objc private func toggleFullScreen() {
+        guard !readingToolsOpen else { return }
+        preferences.fullScreen.toggle()
+        preferences.save()
+        applyReadingChrome()
+        UIAccessibility.post(notification: .layoutChanged, argument: preferences.fullScreen ? nil : toolButtons.first)
+    }
+
+    @objc private func contentTapped(_ recognizer: UITapGestureRecognizer) {
+        let x = recognizer.location(in: scrollView).x
+        if x >= scrollView.bounds.width * 0.3 && x <= scrollView.bounds.width * 0.7 {
+            toggleFullScreen()
+        }
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        var touchedView = touch.view
+        while let current = touchedView, current !== scrollView {
+            if current is UIControl { return false }
+            touchedView = current.superview
+        }
+        return true
+    }
+
+    override func accessibilityPerformEscape() -> Bool {
+        guard preferences.fullScreen else { return super.accessibilityPerformEscape() }
+        toggleFullScreen()
+        return true
     }
 
     private func configurePages(preservePosition: Bool) {
@@ -588,10 +829,11 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         pageReader.view.isHidden = !paged
         scrollView.isHidden = paged
         guard paged, let chapter, let book else { return }
-        let text = NSMutableAttributedString(attributedString: preferences.attributedText(chapter.title + "\n", size: 28))
+        let text = NSMutableAttributedString(attributedString: preferences.attributedText(chapter.title + "\n", size: preferences.titleFontSize, isTitle: true))
         text.append(preferences.attributedText(displayedBody))
         pageReader.configure(
-            text: text, paper: preferences.paper, fraction: pendingFraction ?? 0,
+            text: text, paper: preferences.paper, insets: preferences.typography.insets, fraction: pendingFraction ?? 0,
+            minimumContentSize: preferences.minimumPageContentSize,
             preservePosition: preservePosition, hasPrevious: chapterIndex > 0,
             hasNext: chapterIndex + 1 < book.chapters.count
         )
@@ -600,23 +842,25 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private func applyPalette() {
         let paper = preferences.paper
         view.backgroundColor = paper.background
-        topBar.backgroundColor = paper.background
-        footer.backgroundColor = paper.background
+        readingInfoBackground.backgroundColor = paper.background
+        chapterInfoLabel.textColor = paper.ink.withAlphaComponent(0.72)
+        pageInfoLabel.textColor = paper.ink.withAlphaComponent(0.72)
+        topBarBackground.backgroundColor = paper.toolbarBackground
+        footerBackground.backgroundColor = paper.toolbarBackground
+        topBarSeparator.backgroundColor = paper.toolbarSeparator
+        footerSeparator.backgroundColor = paper.toolbarSeparator
         bookLabel.textColor = paper.ink
         chapterTitle.textColor = paper.ink
         sourceLabel.textColor = paper.secondary
         chapterNumber.textColor = paper.secondary
         endLabel.textColor = paper.secondary
         statusLabel.textColor = paper.secondary
-        progressLabel.textColor = paper.secondary
-        progressView.trackTintColor = paper.rule
-        progressView.progressTintColor = paper.ink.withAlphaComponent(0.65)
         scrollView.indicatorStyle = paper == .night ? .white : .black
         activity.color = paper.ink
         chapterEndButton.backgroundColor = paper.rule
         chapterEndButton.setTitleColor(paper.ink, for: .normal)
         for button in [backButton, bookmarkButton, detailsButton, previousButton, nextButton, retryButton, switchSourceButton] + toolButtons { button.tintColor = paper.ink }
-        setNeedsStatusBarAppearanceUpdate()
+        updateSystemBars()
     }
 
     private func startReadingSession() {
@@ -687,6 +931,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     private func presentSheet(_ controller: UIViewController) {
         readingToolsOpen = true
+        updateSystemBars()
         finishReadingSession()
         let navigation = UINavigationController(rootViewController: controller)
         navigation.modalPresentationStyle = .pageSheet
@@ -700,7 +945,11 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         present(navigation, animated: true)
     }
 
-    private func resumeAfterReadingTools() { readingToolsOpen = false; startReadingSession() }
+    private func resumeAfterReadingTools() {
+        readingToolsOpen = false
+        updateSystemBars()
+        startReadingSession()
+    }
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { resumeAfterReadingTools() }
 
     @objc private func openSpeechControls() {
@@ -774,5 +1023,13 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         ])
         UIAccessibility.post(notification: .announcement, argument: text)
         UIView.animate(withDuration: 0.25, delay: 1.5, options: .curveEaseOut) { label.alpha = 0 } completion: { _ in label.removeFromSuperview() }
+    }
+}
+
+/// Bars receive touches; the uncovered center belongs to the reader underneath.
+private final class YueduReadingChromeOverlay: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let target = super.hitTest(point, with: event)
+        return target === self ? nil : target
     }
 }
