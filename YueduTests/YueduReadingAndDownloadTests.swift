@@ -58,8 +58,14 @@ final class YueduReadingAndDownloadTests: XCTestCase {
         let name = UUID().uuidString
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
-        ReaderPreferences(fontSize: 26, lineSpacing: 9, paper: .night, turnStyle: .curl).save(defaults: defaults)
-        XCTAssertEqual(ReaderPreferences.load(defaults: defaults).turnStyle, .curl)
+        ReaderPreferences(fontSize: 26, lineSpacing: 9, paper: .night, turnStyle: .slide).save(defaults: defaults)
+        XCTAssertEqual(ReaderPreferences.load(defaults: defaults).turnStyle, .slide)
+        XCTAssertEqual(defaults.string(forKey: "reader.turnStyle"), "slide")
+        defaults.set("curl", forKey: "reader.turnStyle")
+        let migrated = ReaderPreferences.load(defaults: defaults)
+        XCTAssertEqual(migrated.turnStyle, .slide)
+        migrated.save(defaults: defaults)
+        XCTAssertEqual(defaults.string(forKey: "reader.turnStyle"), "slide")
         defaults.set("unrecognized", forKey: "reader.turnStyle")
         XCTAssertEqual(ReaderPreferences.load(defaults: defaults).turnStyle, .scroll)
     }
@@ -122,7 +128,7 @@ final class YueduReadingAndDownloadTests: XCTestCase {
         XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(contentsOf: queueFile)) as? [String], [])
     }
 
-    func testUserPauseRemovesDurableRequest() async throws {
+    func testUserPausePersistsWithoutAutomaticallyRestarting() async throws {
         let library = LibraryStore(directory: directory, seed: false)
         let original = library.add(book())
         let queueFile = directory.appendingPathComponent("queue.json")
@@ -135,7 +141,8 @@ final class YueduReadingAndDownloadTests: XCTestCase {
             return ""
         }
         await restored.waitUntilIdle()
-        XCTAssertNil(restored.status(for: original.id))
+        XCTAssertEqual(restored.status(for: original.id)?.isRunning, false)
+        XCTAssertTrue(restored.canResume(bookID: original.id))
     }
 
     func testTransferManifestDeduplicatesAndPersistsCancellation() throws {

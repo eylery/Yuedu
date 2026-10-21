@@ -10,6 +10,9 @@ final class YueduDownloadManager {
         var message: String
         var isRunning: Bool
         var failures: [String] = []
+        var completed = 0
+        var total = 0
+        var failedCount = 0
     }
 
     private struct Request: Codable {
@@ -17,6 +20,11 @@ final class YueduDownloadManager {
         var bookID: UUID
         var sourceID: UUID
         var chapterIDs: [UUID]
+        var paused: Bool? = nil
+        var failedIDs: [UUID]? = nil
+        var failures: [String]? = nil
+
+        var isActive: Bool { paused != true }
     }
 
     static let shared = YueduDownloadManager()
@@ -31,6 +39,7 @@ final class YueduDownloadManager {
     private var statuses: [UUID: Status] = [:]
     private var observers: [NSObjectProtocol] = []
     private var foreground: Bool
+    private(set) var queueError: String?
 
     init(library: LibraryStore? = nil, observeBackground: Bool = true,
          queueFile: URL? = nil, backgroundTransfers: YueduBackgroundTransfer? = nil,
@@ -50,12 +59,16 @@ final class YueduDownloadManager {
                 queue = try JSONDecoder().decode([Request].self, from: Data(contentsOf: file))
                 queue.removeAll { self.library.book(id: $0.bookID)?.sourceID != $0.sourceID }
                 for request in queue {
-                    statuses[request.bookID] = Status(message: "已恢复缓存任务", isRunning: true)
+                    statuses[request.bookID] = Status(
+                        message: request.isActive ? "已恢复缓存任务" : "已暂停 · 可按原范围继续",
+                        isRunning: request.isActive, failures: request.failures ?? []
+                    )
                 }
             } catch {
-                // Retain the file for recovery. No task is reported as running.
+                // Never overwrite an unreadable queue with a new request.
+                queueError = "缓存队列读取失败，原文件已保留：\(error.localizedDescription)"
                 for book in self.library.books where book.sourceID != nil {
-                    statuses[book.id] = Status(message: "缓存队列读取失败，请重新开始：\(error.localizedDescription)", isRunning: false)
+                    statuses[book.id] = Status(message: queueError!, isRunning: false)
                 }
             }
         }
@@ -63,8 +76,12 @@ final class YueduDownloadManager {
             observe(UIApplication.didEnterBackgroundNotification) { $0.enterBackground() }
             observe(UIApplication.didBecomeActiveNotification) { $0.enterForeground() }
             observe(.libraryChanged) { manager in
-                for request in manager.queue where manager.library.book(id: request.bookID)?.sourceID != request.sourceID {
-                    manager.pause(bookID: request.bookID)
+                let removed = Set(manager.queue.filter {
+                    manager.library.book(id: $0.bookID)?.sourceID != $0.sourceID
+                }.map(\.bookID))
+                if !removed.isEmpty {
+                    do { try manager.cancel(bookIDs: removed) }
+                    catch { for id in removed { manager.report(error, bookID: id) } }
                 }
             }
             observe(.sourcesChanged) { manager in
@@ -77,7 +94,7 @@ final class YueduDownloadManager {
             Task { [weak self] in
                 await transfers.connect()
                 guard let self else { return }
-                transfers.retain(books: Set(self.queue.map(\.bookID)))
+                transfers.retain(books: Set(self.queue.filter(\.isActive).map(\.bookID)))
                 for request in self.queue { self.prepare(request) }
                 self.runNext()
             }
@@ -98,7 +115,17 @@ final class YueduDownloadManager {
     }
 
     func status(for bookID: UUID) -> Status? {
-        guard var status = statuses[bookID], status.isRunning else { return statuses[bookID] }
+        guard var status = statuses[bookID] else { return nil }
+        if let request = queue.first(where: { $0.bookID == bookID }) {
+            status.total = request.chapterIDs.count
+            let ids = Set(request.chapterIDs)
+            status.completed = library.book(id: bookID)?.chapters.filter {
+                ids.contains($0.id) && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }.count ?? 0
+            status.failedCount = request.failedIDs?.count ?? 0
+            status.failures = request.failures ?? []
+        }
+        guard status.isRunning else { return status }
         if let error = transfers?.persistenceError {
             status.message += "\n\(error)"
         }
@@ -118,25 +145,46 @@ final class YueduDownloadManager {
         return status
     }
 
+    var taskBookIDs: Set<UUID> { Set(queue.map(\.bookID)) }
+
+    func canResume(bookID: UUID) -> Bool {
+        queue.contains { $0.bookID == bookID && !$0.isActive }
+    }
+
+    func failedChapterIDs(bookID: UUID) -> Set<UUID> {
+        Set(queue.first { $0.bookID == bookID }?.failedIDs ?? [])
+    }
+
     func start(bookID: UUID, startIndex: Int = 0, limit: Int? = nil) {
-        guard let book = library.book(id: bookID), let sourceID = book.sourceID,
-              statuses[bookID]?.isRunning != true else { return }
+        guard let book = library.book(id: bookID) else { return }
         let chapters = book.chapters.dropFirst(min(book.chapters.count, max(0, startIndex)))
             .prefix(max(0, limit ?? book.chapters.count))
-        let request = Request(bookID: bookID, sourceID: sourceID, chapterIDs: chapters.map(\.id))
-        queue.append(request)
-        guard saveQueue(bookID: bookID) else {
-            queue.removeAll { $0.id == request.id }
-            return
-        }
+        start(bookID: bookID, chapterIDs: Set(chapters.map(\.id)))
+    }
+
+    func start(bookID: UUID, chapterIDs: Set<UUID>) {
+        guard let book = library.book(id: bookID), let sourceID = book.sourceID,
+              !queue.contains(where: { $0.bookID == bookID && $0.isActive }) else { return }
+        let ids = book.chapters.filter { chapterIDs.contains($0.id) }.map(\.id)
+        guard !ids.isEmpty else { return }
+        let request = Request(bookID: bookID, sourceID: sourceID, chapterIDs: ids)
+        var updated = queue.filter { $0.bookID != bookID }
+        updated.append(request)
+        do { try replaceQueue(updated) }
+        catch { report(error, bookID: bookID); return }
         statuses[bookID] = Status(message: "等待缓存", isRunning: true)
         prepare(request)
         notify()
         runNext()
     }
 
+    func resume(bookID: UUID, failuresOnly: Bool = false) {
+        guard let request = queue.first(where: { $0.bookID == bookID && !$0.isActive }) else { return }
+        start(bookID: bookID, chapterIDs: Set(failuresOnly ? request.failedIDs ?? [] : request.chapterIDs))
+    }
+
     private func prepare(_ request: Request) {
-        guard usesSourceEngine, let transfers, let book = library.book(id: request.bookID) else { return }
+        guard request.isActive, usesSourceEngine, let transfers, let book = library.book(id: request.bookID) else { return }
         let ids = Set(request.chapterIDs)
         let chapters = book.chapters.filter { ids.contains($0.id) }
         do { try transfers.enqueue(SourceEngine.shared.backgroundPlans(book: book, chapters: chapters)) }
@@ -146,16 +194,41 @@ final class YueduDownloadManager {
     }
 
     func pause(bookID: UUID) {
-        queue.removeAll { $0.bookID == bookID }
+        guard let index = queue.firstIndex(where: { $0.bookID == bookID }) else { return }
+        var updated = queue
+        updated[index].paused = true
+        do { try replaceQueue(updated) }
+        catch { report(error, bookID: bookID); return }
         if currentID == bookID { worker?.cancel() }
         transfers?.remove(bookID: bookID)
-        statuses[bookID] = Status(message: "已暂停 · 已完成的章节已保存", isRunning: false)
-        _ = saveQueue(bookID: bookID)
+        statuses[bookID] = Status(message: "已暂停 · 已完成的章节已保存，可继续原范围", isRunning: false)
         notify()
     }
 
     func pauseAll() {
-        for id in queue.map(\.bookID) { pause(bookID: id) }
+        for id in queue.filter(\.isActive).map(\.bookID) { pause(bookID: id) }
+    }
+
+    func resumeAll() {
+        for id in queue.filter({ !$0.isActive }).map(\.bookID) { resume(bookID: id) }
+    }
+
+    func cancel(bookIDs: Set<UUID>) throws {
+        try replaceQueue(queue.filter { !bookIDs.contains($0.bookID) })
+        if let currentID, bookIDs.contains(currentID) { worker?.cancel() }
+        for id in bookIDs {
+            transfers?.remove(bookID: id)
+            statuses[id] = Status(message: "任务已取消 · 已完成的缓存保留", isRunning: false)
+        }
+        notify()
+    }
+
+    @discardableResult
+    func clearCache(bookIDs: Set<UUID>, cleanup: YueduCacheCleanup) throws -> YueduCacheSummary {
+        let ids = Set(library.books.filter { bookIDs.contains($0.id) && $0.supportsCacheManagement }.map(\.id))
+        // Persist cancellation before clearing; a relaunch must not refill intentionally removed bodies.
+        try cancel(bookIDs: ids)
+        return try library.clearCachedChapters(bookIDs: ids, cleanup: cleanup)
     }
 
     /// Suspension pauses WebKit evaluation, but preserves both queues and all
@@ -177,15 +250,26 @@ final class YueduDownloadManager {
     }
 
     private func runNext() {
-        guard foreground, worker == nil, let request = queue.first else { return }
+        guard foreground, worker == nil, let request = queue.first(where: \.isActive) else { return }
         currentID = request.bookID
         worker = Task { [weak self] in
             guard let self else { return }
             let completed = await self.download(request)
-            if completed {
-                self.queue.removeAll { $0.id == request.id }
+            if completed, let index = self.queue.firstIndex(where: { $0.id == request.id && $0.isActive }) {
+                var updated = self.queue
+                if updated[index].failedIDs?.isEmpty == false {
+                    updated[index].paused = true
+                } else {
+                    updated.remove(at: index)
+                }
+                do { try self.replaceQueue(updated) }
+                catch {
+                    // Stop in memory on a disk failure, rather than repeatedly running the same task.
+                    self.queue[index].paused = true
+                    self.report(error, bookID: request.bookID)
+                }
                 self.transfers?.remove(bookID: request.bookID)
-                _ = self.saveQueue(bookID: request.bookID)
+                self.notify()
             }
             self.worker = nil
             self.currentID = nil
@@ -196,28 +280,30 @@ final class YueduDownloadManager {
     /// False means interrupted, leaving the durable request available to resume.
     private func download(_ request: Request) async -> Bool {
         if usesSourceEngine, SourceStore.shared.source(id: request.sourceID)?.enabled != true {
-            statuses[request.bookID] = Status(message: "书源已停用或移除，请恢复书源后重试", isRunning: false)
-            notify()
-            return true
+            suspend(request, message: "书源已停用或移除，请恢复书源后继续")
+            return false
         }
-        var failures: [String] = []
-        var failedCount = 0
+        var failures = request.failures ?? []
+        var failedIDs = request.failedIDs ?? []
+        let revision = library.cacheRevision(for: request.bookID)
         for (offset, id) in request.chapterIDs.enumerated() {
-            if Task.isCancelled { return false }
+            if Task.isCancelled || !queue.contains(where: { $0.id == request.id && $0.isActive }) { return false }
             guard let book = library.book(id: request.bookID), book.sourceID == request.sourceID,
                   let chapter = book.chapters.first(where: { $0.id == id }) else {
                 statuses[request.bookID] = Status(message: "书籍或目录已变化，请重新开始缓存", isRunning: false)
                 notify()
                 return true
             }
-            statuses[request.bookID] = Status(
-                message: "正在缓存 \(offset + 1)/\(request.chapterIDs.count) · \(chapter.title)", isRunning: true
-            )
-            notify()
             if !chapter.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 transfers?.remove(bookID: book.id, chapterID: chapter.id)
                 continue
             }
+            // Foreground resumption keeps failures for an explicit retry, rather than looping on them.
+            if failedIDs.contains(id) { continue }
+            statuses[request.bookID] = Status(
+                message: "正在缓存 \(offset + 1)/\(request.chapterIDs.count) · \(chapter.title)", isRunning: true
+            )
+            notify()
             do {
                 let text = try await load(chapter, book)
                 try Task.checkCancellation()
@@ -226,45 +312,75 @@ final class YueduDownloadManager {
                 }
                 let cachedBytes = library.book(id: book.id)?.chapters.reduce(0) { $0 + $1.content.utf8.count } ?? 0
                 guard cachedBytes + text.utf8.count <= 100_000_000 else {
-                    statuses[book.id] = Status(message: "已达到单本书 100 MB 的批量缓存上限，已完成章节仍可离线阅读。", isRunning: false)
-                    notify()
-                    return true
+                    suspend(request, message: "已达到单本书 100 MB 上限，可清理后重新缓存。")
+                    return false
                 }
-                library.updateChapterContent(bookID: book.id, chapterID: chapter.id, text: text)
-                if let error = library.persistenceError {
-                    statuses[book.id] = Status(message: "缓存停止：\(error)", isRunning: false)
-                    notify()
-                    return true
+                guard queue.contains(where: { $0.id == request.id && $0.isActive }),
+                      try library.cacheChapterContent(bookID: book.id, chapterID: chapter.id, text: text, revision: revision) else {
+                    if queue.contains(where: { $0.id == request.id && $0.isActive }) {
+                        suspend(request, message: "缓存或目录已变化，请检查后继续。")
+                    }
+                    return false
                 }
                 transfers?.remove(bookID: book.id, chapterID: chapter.id)
                 try await Task.sleep(nanoseconds: 150_000_000)
             } catch {
                 if Task.isCancelled { return false }
-                failedCount += 1
-                if failures.count < 30 { failures.append("\(chapter.title)：\(error.localizedDescription)") }
+                if !failedIDs.contains(chapter.id) { failedIDs.append(chapter.id) }
+                if failures.count < 30 { failures.append("\(chapter.title)：\(error.localizedDescription.prefix(500))") }
+                if let index = queue.firstIndex(where: { $0.id == request.id && $0.isActive }) {
+                    var updated = queue
+                    updated[index].failedIDs = failedIDs
+                    updated[index].failures = failures
+                    do { try replaceQueue(updated) }
+                    catch {
+                        queue[index].paused = true
+                        report(error, bookID: book.id)
+                        transfers?.remove(bookID: book.id)
+                        return false
+                    }
+                }
                 transfers?.remove(bookID: book.id, chapterID: chapter.id)
             }
         }
         statuses[request.bookID] = Status(
-            message: failedCount == 0 ? "缓存完成" : "缓存结束 · \(failedCount) 章失败，可重试未缓存章节",
-            isRunning: false, failures: failures
+            message: failedIDs.isEmpty ? "缓存完成" : "缓存结束 · \(failedIDs.count) 章失败，可仅重试失败章节",
+            isRunning: false, failures: failures, completed: request.chapterIDs.count - failedIDs.count,
+            total: request.chapterIDs.count, failedCount: failedIDs.count
         )
         notify()
         return true
     }
 
-    @discardableResult
-    private func saveQueue(bookID: UUID) -> Bool {
-        guard let queueFile else { return true }
-        do {
+    private func replaceQueue(_ updated: [Request]) throws {
+        if let queueError { throw SourceError.invalid(queueError) }
+        if let queueFile {
             try FileManager.default.createDirectory(at: queueFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(queue).write(to: queueFile, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-            return true
-        } catch {
-            statuses[bookID] = Status(message: "缓存队列保存失败：\(error.localizedDescription)", isRunning: false)
-            notify()
-            return false
+            try JSONEncoder().encode(updated).write(to: queueFile, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         }
+        queue = updated
+    }
+
+    private func suspend(_ request: Request, message: String) {
+        guard let index = queue.firstIndex(where: { $0.id == request.id }) else { return }
+        var updated = queue
+        updated[index].paused = true
+        do { try replaceQueue(updated) }
+        catch {
+            queue[index].paused = true
+            report(error, bookID: request.bookID)
+            transfers?.remove(bookID: request.bookID)
+            return
+        }
+        statuses[request.bookID] = Status(message: message, isRunning: false)
+        transfers?.remove(bookID: request.bookID)
+        notify()
+    }
+
+    private func report(_ error: Error, bookID: UUID) {
+        statuses[bookID] = Status(message: "缓存队列操作未保存：\(error.localizedDescription)",
+                                  isRunning: queue.contains { $0.bookID == bookID && $0.isActive })
+        notify()
     }
 
     private func notify() {

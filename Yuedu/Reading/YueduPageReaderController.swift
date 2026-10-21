@@ -1,13 +1,13 @@
 import UIKit
 import CoreText
 
-/// A real, interactive UIKit paper curl. Only the current chapter is paginated.
+/// Interactive horizontal page sliding. Only the current chapter is paginated.
 final class YueduPageReaderController: UIViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
     var onPositionChanged: (() -> Void)?
     var onChapterTurn: ((Int) -> Void)?
     private let controller = UIPageViewController(
-        transitionStyle: .pageCurl, navigationOrientation: .horizontal,
-        options: [.spineLocation: UIPageViewController.SpineLocation.min.rawValue]
+        transitionStyle: .scroll,
+        navigationOrientation: .horizontal
     )
     private var text = NSAttributedString(string: "")
     private var paper = ReaderPreferences.Paper.ivory
@@ -31,7 +31,6 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
         view.accessibilityIdentifier = "reader.pagedContent"
         controller.dataSource = self
         controller.delegate = self
-        controller.isDoubleSided = false
         addChild(controller)
         view.addSubview(controller.view)
         controller.view.pinEdges(to: view)

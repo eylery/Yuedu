@@ -23,6 +23,12 @@ struct YueduLibraryBackup: Codable {
               snapshot.readingSeconds.isFinite, snapshot.readingSeconds >= 0 else {
             throw SourceError.invalid("备份内有重复记录或无效的阅读统计。")
         }
+        let groups = snapshot.shelfGroups ?? []
+        guard groups.count <= 10_000, Set(groups.map(\.id)).count == groups.count,
+              groups.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.name.count <= 20 }) else {
+            throw SourceError.invalid("备份中包含无效的书架分组。")
+        }
+        let groupIDs = Set(groups.map(\.id))
         var booksByID: [UUID: Book] = [:]
         for book in snapshot.books {
             guard Set(book.chapters.map(\.id)).count == book.chapters.count,
@@ -30,6 +36,9 @@ struct YueduLibraryBackup: Codable {
                   (0...1).contains(book.progress.scrollFraction),
                   (book.chapters.isEmpty ? book.progress.chapterIndex == 0 : book.chapters.indices.contains(book.progress.chapterIndex)) else {
                 throw SourceError.invalid("《\(book.title)》的目录或进度无效。")
+            }
+            if let groupID = book.shelf?.groupID, !groupIDs.contains(groupID) {
+                throw SourceError.invalid("《\(book.title)》引用了不存在的书架分组。")
             }
             booksByID[book.id] = book
         }
@@ -49,10 +58,26 @@ struct YueduLibraryBackup: Codable {
         var updated = store.snapshot
         var mapping: [UUID: UUID] = [:]
         var incomingBooks: [UUID: Book] = [:]
+        var groups = updated.shelfGroups ?? []
+        var groupMapping: [UUID: UUID] = [:]
+        for var group in library.shelfGroups ?? [] {
+            let originalID = group.id
+            if let existing = groups.first(where: { $0.name.localizedCaseInsensitiveCompare(group.name) == .orderedSame }) {
+                groupMapping[originalID] = existing.id
+            } else {
+                if groups.contains(where: { $0.id == group.id }) { group.id = UUID() }
+                groupMapping[originalID] = group.id
+                groups.append(group)
+            }
+        }
+        updated.shelfGroups = groups
         let oldBookCount = updated.books.count
         let oldBookmarkCount = updated.bookmarks.count
         for var incoming in library.books {
             let originalID = incoming.id
+            if let groupID = incoming.shelf?.groupID {
+                incoming.shelf?.groupID = groupMapping[groupID]
+            }
             if let sourceID = incoming.sourceID, let url = sourceURLs[sourceID.uuidString] {
                 if let source = sources.first(where: { $0.bookSourceUrl == url }) {
                     incoming.sourceID = source.id
@@ -76,6 +101,22 @@ struct YueduLibraryBackup: Codable {
                 if updated.books.contains(where: { $0.id == incoming.id }) { incoming.id = UUID() }
                 mapping[originalID] = incoming.id
                 updated.books.append(incoming)
+            }
+        }
+        // Reconnect imported editions even when one of them already existed on this shelf.
+        let editionGroups = Dictionary(grouping: library.books.filter { $0.editionGroupID != nil }) {
+            $0.editionGroupID!
+        }
+        for (incomingGroup, members) in editionGroups {
+            let ids = Set(members.compactMap { mapping[$0.id] })
+            let linked = updated.books.filter { ids.contains($0.id) }
+            let groups = Set(linked.compactMap(\.editionGroupID))
+            let group = linked.first?.editionGroupID ?? incomingGroup
+            for index in updated.books.indices {
+                if ids.contains(updated.books[index].id) ||
+                    updated.books[index].editionGroupID.map({ groups.contains($0) }) == true {
+                    updated.books[index].editionGroupID = group
+                }
             }
         }
         for var bookmark in library.bookmarks {

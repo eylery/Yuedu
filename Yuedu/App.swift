@@ -8,10 +8,17 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         if ProcessInfo.processInfo.arguments.contains("--uitesting-reset") {
             let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Yuedu")
             try? FileManager.default.removeItem(at: directory)
-            for key in ["reader.fontSize", "reader.lineSpacing", "reader.paper", "reader.turnStyle"] {
+            for key in ["reader.fontSize", "reader.lineSpacing", "reader.paper", "reader.turnStyle", "shelf.sort", "shelf.showSamples", "following.autoCheck", "search.history"] {
                 UserDefaults.standard.removeObject(forKey: key)
             }
         }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--uitesting-reset"),
+           !ProcessInfo.processInfo.arguments.contains("--uitesting-empty") {
+            for book in SampleLibrary.books { LibraryStore.shared.add(book) }
+            UserDefaults.standard.set(true, forKey: "shelf.showSamples")
+        }
+        #endif
         _ = YueduDownloadManager.shared
         let window = UIWindow(frame: UIScreen.main.bounds)
         window.tintColor = Theme.accent
@@ -29,6 +36,17 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             return
         }
         YueduBackgroundTransfer.shared.handleEvents(completion: completionHandler)
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        if UserDefaults.standard.bool(forKey: "following.autoCheck") {
+            YueduFollowingManager.shared.start(automatic: true)
+        }
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        YueduFollowingManager.shared.cancel()
+        YueduSourceChecker.shared.cancel()
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {

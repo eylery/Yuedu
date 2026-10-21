@@ -42,7 +42,7 @@ final class SourceFlowUITests: XCTestCase {
         attachScreenshot(app, name: "Imported local book source")
 
         app.tabBars.buttons["发现"].tap()
-        let explore = app.buttons["探索你的书源"]
+        let explore = app.buttons["discovery.searchBooks"]
         XCTAssertTrue(explore.waitForExistence(timeout: 3))
         explore.tap()
         let search = app.searchFields["搜索书名、作者"]
@@ -167,7 +167,7 @@ final class SourceFlowUITests: XCTestCase {
         XCTAssertTrue(scriptedSwitch.isEnabled, "JavaScript text sources should be usable by the Legado runtime.")
         XCTAssertEqual(scriptedSwitch.value as? String, "1")
         XCTAssertFalse(app.tables.cells.staticTexts[excludedName].exists, "Excluded comic sources must not enter the source list.")
-        let sourceCount = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "2 个书源")).firstMatch
+        let sourceCount = app.staticTexts["sources.count"]
         assertLabel(sourceCount, contains: "2 个已启用", timeout: 3)
         attachScreenshot(app, name: "Two enabled text sources after comic exclusion")
 
@@ -274,7 +274,7 @@ final class SourceFlowUITests: XCTestCase {
         XCTAssertTrue(app.alerts["已导入 2 个书源"].waitForExistence(timeout: 12))
         app.alerts["已导入 2 个书源"].buttons["完成"].tap()
         app.tabBars.buttons["发现"].tap()
-        app.buttons["探索你的书源"].tap()
+        app.buttons["discovery.searchBooks"].tap()
         let search = app.searchFields["搜索书名、作者"]
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap()
@@ -328,10 +328,19 @@ final class SourceFlowUITests: XCTestCase {
         let alternative = app.cells.staticTexts["春日手记"]
         XCTAssertTrue(alternative.waitForExistence(timeout: 12))
         alternative.tap()
-        let confirm = app.alerts["确认续读位置"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 12))
-        XCTAssertTrue(confirm.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "第二章")).firstMatch.exists)
-        confirm.buttons["从匹配章节续读"].tap()
+        XCTAssertTrue(app.navigationBars["换源对比"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.cells["sourceSwitch.chapter"].staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "第二章")).firstMatch.exists)
+        let confirm = app.buttons["sourceSwitch.confirm"]
+        XCTAssertFalse(confirm.isEnabled)
+        let preview = app.cells["sourceSwitch.preview"]
+        for _ in 0..<5 where !preview.isHittable { app.tables["sourceSwitch.list"].swipeUp() }
+        preview.tap()
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: confirm)
+        guard XCTWaiter.wait(for: [ready], timeout: 15) == .completed else {
+            XCTFail("Source switch must verify chapter text before saving")
+            return
+        }
+        confirm.tap()
         assertLabel(app.staticTexts["reader.chapterTitle"], contains: "第二章", timeout: 12)
         assertLabel(app.staticTexts["reader.text"], contains: "雨停了", timeout: 12)
         attachScreenshot(app, name: "Alternate source resumes matched chapter")
@@ -351,7 +360,7 @@ final class SourceFlowUITests: XCTestCase {
         app.buttons["reader.back"].tap()
         app.tabBars.buttons["我的"].tap()
         app.buttons["我的书签"].tap()
-        let bookmark = app.cells.staticTexts["第一章 春日读书"]
+        let bookmark = app.cells.staticTexts["第一章 春日读书"].firstMatch
         XCTAssertTrue(bookmark.waitForExistence(timeout: 3))
         bookmark.tap()
         assertLabel(app.staticTexts["reader.text"], contains: "窗边的光", timeout: 5)

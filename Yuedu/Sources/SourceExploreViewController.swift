@@ -31,7 +31,7 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         super.init(nibName: nil, bundle: nil)
     }
 
-    private init(source: BookSource, category: SourceCategory) {
+    init(source: BookSource, category: SourceCategory) {
         self.source = source
         self.category = category
         super.init(nibName: nil, bundle: nil)
@@ -64,6 +64,11 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         buildFooter()
         updateChrome()
         refresh()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.setNavigationBarHidden(false, animated: animated)
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -317,7 +322,10 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         cell.imageView?.tintColor = Theme.accent
         if category == nil {
             cell.textLabel?.text = categories[indexPath.row].title
-            cell.detailTextLabel?.text = "打开分类，发现新故事"
+            let isHeading = categories[indexPath.row].url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            cell.detailTextLabel?.text = isHeading ? nil : "打开分类，发现新故事"
+            cell.accessoryType = isHeading ? .none : .disclosureIndicator
+            cell.selectionStyle = isHeading ? .none : .default
             cell.imageView?.image = UIImage(systemName: "leaf", withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .light))
         } else {
             let book = books[indexPath.row]
@@ -332,6 +340,7 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         tableView.deselectRow(at: indexPath, animated: true)
         guard !isBusy else { return }
         if category == nil {
+            guard !categories[indexPath.row].url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             navigationController?.pushViewController(SourceExploreViewController(source: source, category: categories[indexPath.row]), animated: true)
         } else {
             let book = books[indexPath.row]

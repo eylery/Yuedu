@@ -41,16 +41,19 @@ final class YueduBookDetailViewController: UITableViewController {
         observers.forEach(NotificationCenter.default.removeObserver)
     }
 
-    override func numberOfSections(in tableView: UITableView) -> Int { book == nil ? 0 : 3 }
+    override func numberOfSections(in tableView: UITableView) -> Int { book == nil ? 0 : (book?.canFollow == true ? 4 : 3) }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         if section == 0 { return 1 }
-        if section == 1 { return 2 }
-        return book?.sourceID == nil ? 0 : 5
+        if section == 1 {
+            return book.map { LibraryStore.shared.editions(of: $0).isEmpty ? 2 : 3 } ?? 2
+        }
+        if section == 3 { return 2 }
+        return book?.sourceID == nil ? 0 : 6
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        section == 1 ? "阅读" : section == 2 && book?.sourceID != nil ? "在线与离线" : nil
+        section == 3 ? "追更" : section == 1 ? "阅读" : section == 2 && book?.sourceID != nil ? "在线与离线" : nil
     }
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
@@ -79,21 +82,27 @@ final class YueduBookDetailViewController: UITableViewController {
             cell.accessoryType = .none
             cell.selectionStyle = .none
         } else if indexPath.section == 1 {
-            content.text = indexPath.row == 0 ? "继续阅读" : "目录与书签"
-            content.secondaryText = indexPath.row == 0 ? "\(book.currentChapterTitle) · \(Int(book.fractionRead * 100))%" : "搜索章节、查看离线状态、跳转阅读"
-            content.image = UIImage(systemName: indexPath.row == 0 ? "book" : "list.bullet")
-            cell.accessibilityIdentifier = indexPath.row == 0 ? "bookDetail.read" : "bookDetail.contents"
+            content.text = ["继续阅读", "目录与书签", "已保存版本"][indexPath.row]
+            content.secondaryText = indexPath.row == 0 ? "\(book.currentChapterTitle) · \(Int(book.fractionRead * 100))%"
+                : indexPath.row == 1 ? "搜索章节、查看离线状态、跳转阅读"
+                : "另有 \(LibraryStore.shared.editions(of: book).count) 个版本 · 返回原书或已缓存版本"
+            content.image = UIImage(systemName: ["book", "list.bullet", "books.vertical"][indexPath.row])
+            cell.accessibilityIdentifier = ["bookDetail.read", "bookDetail.contents", "bookDetail.editions"][indexPath.row]
+        } else if indexPath.section == 3 {
+            content.text = indexPath.row == 0 ? (book.isFollowing ? "暂停追更" : "开始追更") : "追更管理"
+            content.secondaryText = indexPath.row == 0 ? "\(book.unreadUpdateCount) 章未读更新 · 最新：\(book.latestChapterTitle)" : "批量检查更新、查看失败原因及自动检查设置"
+            cell.accessibilityIdentifier = "bookDetail.following.\(indexPath.row)"
         } else {
             let running = YueduDownloadManager.shared.status(for: bookID)?.isRunning == true
             let titles = [updating ? "正在更新目录…" : "更新目录", "换源续读",
-                          "缓存全书", "缓存后续 50 章", running ? "暂停缓存" : "查看缓存情况"]
+                          "缓存全书", "缓存后续 50 章", running ? "暂停缓存" : "查看缓存情况", "管理本书缓存"]
             let symbols = ["arrow.clockwise", "arrow.triangle.2.circlepath", "arrow.down.circle",
-                           "text.badge.plus", running ? "pause.circle" : "info.circle"]
+                           "text.badge.plus", running ? "pause.circle" : "info.circle", "internaldrive"]
             content.text = titles[indexPath.row]
             content.image = UIImage(systemName: symbols[indexPath.row])
-            content.secondaryText = indexPath.row == 1 ? "查找同名书籍，匹配续读章节；保留原书" : nil
+            content.secondaryText = indexPath.row == 1 ? "对比版本、匹配章节并试读；保留原书" : nil
             cell.accessibilityIdentifier = "bookDetail.online.\(indexPath.row)"
-            if updating || (running && indexPath.row < 4) {
+            if (updating && indexPath.row < 5) || (running && indexPath.row < 4) {
                 content.textProperties.color = Theme.secondary
                 cell.selectionStyle = .none
             }
@@ -105,8 +114,18 @@ final class YueduBookDetailViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         guard let book else { return }
-        if indexPath.section == 1 {
+        if indexPath.section == 3 {
+            if indexPath.row == 0 {
+                do { try LibraryStore.shared.setFollowing([bookID], enabled: !book.isFollowing) }
+                catch { showMessage("未能保存", error.localizedDescription) }
+            } else {
+                navigationController?.pushViewController(YueduFollowingViewController(), animated: true)
+            }
+        } else if indexPath.section == 1 {
             if indexPath.row == 0 { openReader() }
+            else if indexPath.row == 2 {
+                navigationController?.pushViewController(YueduSavedEditionsViewController(bookID: bookID), animated: true)
+            }
             else {
                 let contents = ReaderContentsViewController(
                     book: book, currentChapter: book.progress.chapterIndex, bookmarksSelected: false
@@ -120,7 +139,7 @@ final class YueduBookDetailViewController: UITableViewController {
         } else if indexPath.section == 2 {
             let manager = YueduDownloadManager.shared
             let running = manager.status(for: bookID)?.isRunning == true
-            guard !updating, !running || indexPath.row == 4 else { return }
+            guard indexPath.row == 5 || (!updating && (!running || indexPath.row == 4)) else { return }
             switch indexPath.row {
             case 0: refreshCatalog()
             case 1:
@@ -129,6 +148,8 @@ final class YueduBookDetailViewController: UITableViewController {
                 )
             case 2: manager.start(bookID: bookID)
             case 3: manager.start(bookID: bookID, startIndex: book.progress.chapterIndex, limit: 50)
+            case 5:
+                navigationController?.pushViewController(YueduCacheViewController(bookID: bookID), animated: true)
             default:
                 if running { manager.pause(bookID: bookID) }
                 else {
@@ -146,7 +167,7 @@ final class YueduBookDetailViewController: UITableViewController {
     }
 
     private func refreshCatalog() {
-        guard let result = book?.searchResult else { return }
+        guard book?.searchResult != nil else { return }
         updating = true
         notice = nil
         tableView.reloadData()
@@ -155,10 +176,8 @@ final class YueduBookDetailViewController: UITableViewController {
         })
         operation = Task { [weak self] in
             do {
-                let fetched = try await SourceEngine.shared.loadBook(result)
-                try Task.checkCancellation()
                 guard let self else { return }
-                let added = try LibraryStore.shared.refreshCatalog(bookID: self.bookID, fetched: fetched)
+                let added = try await YueduFollowingManager.shared.checkBook(bookID: self.bookID)
                 self.notice = added == 0 ? "目录已是最新，进度与缓存已保留。" : "目录更新完成 · 新增 \(added) 章，进度与缓存已保留。"
             } catch {
                 guard let self else { return }

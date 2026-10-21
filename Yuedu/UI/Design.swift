@@ -208,6 +208,7 @@ final class BookCard: UIControl {
         }
         detailAction = details
     }
+    var customMenu: (() -> UIMenu)?
     var menuAction: (() -> Void)?
     var detailAction: (() -> Void)?
     required init?(coder: NSCoder) { fatalError() }
@@ -216,6 +217,7 @@ final class BookCard: UIControl {
         func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
             guard let card = interaction.view as? BookCard else { return nil }
             return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+                if let customMenu = card.customMenu { return customMenu() }
                 var actions: [UIAction] = []
                 if card.detailAction != nil {
                     actions.append(UIAction(title: "书籍详情与缓存", image: UIImage(systemName: "book")) { _ in card.detailAction?() })

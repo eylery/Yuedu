@@ -22,7 +22,13 @@ final class ProfileViewController: LibraryPageController {
         content.addArrangedSubview(stats)
         let actions = vstack([], spacing: 12)
         actions.addArrangedSubview(ActionCard(icon: "bookmark", title: "我的书签", subtitle: "收藏那些想再读一遍的地方") { [weak self] in self?.navigationController?.pushViewController(AllBookmarksViewController(), animated: true) })
+        actions.addArrangedSubview(ActionCard(icon: "internaldrive", title: "缓存管理", subtitle: "空间占用、下载任务与章节清理") { [weak self] in
+            self?.navigationController?.pushViewController(YueduCacheViewController(), animated: true)
+        })
         actions.addArrangedSubview(ActionCard(icon: "textformat.size", title: "阅读设置", subtitle: "字号、行距与纸张，调成喜欢的样子") { [weak self] in self?.navigationController?.pushViewController(ReadingSettingsViewController(), animated: true) })
+        actions.addArrangedSubview(ActionCard(icon: "text.badge.checkmark", title: "正文净化", subtitle: "替换规则、效果预览与恢复原文") { [weak self] in
+            self?.navigationController?.pushViewController(YueduPurificationViewController(), animated: true)
+        })
         actions.addArrangedSubview(ActionCard(icon: "square.and.arrow.down", title: "导入本地书籍", subtitle: "支持 TXT 与 EPUB 格式") { [weak self] in
             guard let tabs = self?.tabBarController as? MainTabBarController else { return }
             tabs.selectedIndex = 0

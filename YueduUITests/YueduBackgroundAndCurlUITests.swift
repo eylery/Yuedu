@@ -6,7 +6,7 @@ final class YueduBackgroundAndCurlUITests: XCTestCase {
     }
 
     @MainActor
-    func testCurlTurnsAcrossChaptersChangesStyleAndRestoresPage() async throws {
+    func testSlideTurnsAcrossChaptersChangesStyleAndRestoresPage() async throws {
         let app = XCUIApplication()
         app.launchArguments = ["--uitesting-reset"]
         app.launch()
@@ -14,18 +14,22 @@ final class YueduBackgroundAndCurlUITests: XCTestCase {
         app.buttons["shelf.continue"].tap()
         app.buttons["reader.settings"].tap()
         try require(app.navigationBars["阅读设置"])
-        reveal(app.buttons["仿真翻页"], in: app.scrollViews.firstMatch)
-        app.buttons["仿真翻页"].tap()
+        reveal(app.buttons["平移翻页"], in: app.scrollViews.firstMatch)
+        app.buttons["平移翻页"].tap()
         app.buttons["完成"].tap()
         let page = app.staticTexts["reader.pageText"].firstMatch
         try require(page)
         let initialText = page.label
         let paper = app.otherElements["reader.pagedContent"]
+        paper.swipeLeft()
+        expect(page, predicate: NSPredicate(format: "label != %@", initialText))
+        paper.swipeRight()
+        expect(page, predicate: NSPredicate(format: "label == %@", initialText))
         paper.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         expect(page, predicate: NSPredicate(format: "label != %@", initialText))
         XCTAssertTrue(app.staticTexts["reader.progress"].label.contains("页"))
         app.buttons["reader.addBookmark"].tap()
-        screenshot(app, "Paper curl second page")
+        screenshot(app, "Horizontal slide second page")
 
         app.terminate()
         app.launchArguments = []
@@ -45,7 +49,7 @@ final class YueduBackgroundAndCurlUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["reader.progress"].label.contains("第 2 /"))
         paper.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
         expect(app.staticTexts["reader.progress"], predicate: NSPredicate(format: "label CONTAINS %@", "第 1 /"))
-        screenshot(app, "Reverse curl returns to previous chapter")
+        screenshot(app, "Reverse slide returns to previous chapter")
 
         app.buttons["reader.settings"].tap()
         let font = app.sliders["readingSettings.fontSize"]
@@ -100,7 +104,7 @@ final class YueduBackgroundAndCurlUITests: XCTestCase {
         try require(app.alerts["已导入 1 个书源"], timeout: 15)
         app.alerts["已导入 1 个书源"].buttons["完成"].tap()
         app.tabBars.buttons["发现"].tap()
-        app.buttons["探索你的书源"].tap()
+        app.buttons["discovery.searchBooks"].tap()
         let search = app.searchFields["搜索书名、作者"]
         search.tap()
         search.typeText("后台\n")

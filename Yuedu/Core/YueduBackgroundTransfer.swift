@@ -50,6 +50,7 @@ final class YueduBackgroundTransfer: NSObject, URLSessionDownloadDelegate {
     private var completionHandlers: [() -> Void] = []
     private var eventsFinished = false
     private(set) var persistenceError: String?
+    var spooledBytes: Int { records.reduce(0) { $0 + $1.bytes } }
     private lazy var session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
 
     init(directory: URL? = nil, configuration: URLSessionConfiguration? = nil) {
@@ -188,6 +189,7 @@ final class YueduBackgroundTransfer: NSObject, URLSessionDownloadDelegate {
 
     func remove(bookID: UUID, chapterID: UUID? = nil) {
         let removed = records.filter { $0.bookID == bookID && (chapterID == nil || $0.chapterID == chapterID) }
+        guard !removed.isEmpty else { return }
         records.removeAll { $0.bookID == bookID && (chapterID == nil || $0.chapterID == chapterID) }
         for record in removed {
             tasks.removeValue(forKey: record.id)?.cancel()

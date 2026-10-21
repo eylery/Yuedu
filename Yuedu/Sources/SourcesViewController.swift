@@ -2,44 +2,55 @@ import UIKit
 import UniformTypeIdentifiers
 
 @MainActor
-final class SourcesViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate {
+final class SourcesViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate, UISearchResultsUpdating {
     private let table = UITableView(frame: .zero, style: .insetGrouped)
     private let countLabel = UILabel()
     private var operation: Task<Void, Never>?
     private var observer: NSObjectProtocol?
     private var lastImportReport: SourceImportReport?
+    private let search = UISearchController(searchResultsController: nil)
+    private let groupButton = UIButton(type: .system)
+    private let filterButton = UIButton(type: .system)
+    private var visible: [BookSource] = []
+    private var selected = Set<UUID>()
+    private var managing = false
+    private var group: String?
+    private var filter: YueduSourceFilter = .all
+    private var sorting: YueduSourceSort = .imported
+    private var checkObserver: NSObjectProtocol?
+    private var batchBar: UIView?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "书源"
+        navigationItem.leftItemsSupplementBackButton = true
         view.backgroundColor = Theme.bg
         updateImportMenu()
         table.backgroundColor = Theme.bg
         table.separatorColor = Theme.line
         table.dataSource = self
         table.delegate = self
-        table.rowHeight = 86
+        table.rowHeight = UITableView.automaticDimension
+        table.estimatedRowHeight = 86
+        table.accessibilityIdentifier = "sources.list"
+        search.searchResultsUpdater = self
+        search.obscuresBackgroundDuringPresentation = false
+        search.searchBar.placeholder = "搜索书源名称、网址或分组"
+        navigationItem.searchController = search
+        navigationItem.hidesSearchBarWhenScrolling = false
+        definesPresentationContext = true
         view.addSubview(table)
         table.pinEdges(to: view)
-        let header = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 188))
-        let eyebrow = UILabel()
-        eyebrow.text = "YOUR READING SOURCES"
-        eyebrow.font = .systemFont(ofSize: 10, weight: .semibold)
-        eyebrow.textColor = Theme.accent
-        let heading = UILabel()
-        heading.text = "好故事，自有来处。"
-        heading.font = .readingSerif(29)
-        heading.textColor = Theme.ink
-        heading.adjustsFontSizeToFitWidth = true
-        heading.minimumScaleFactor = 0.75
-        let subtitle = UILabel()
-        subtitle.text = "连接你熟悉的内容，让阅读更自由。"
-        subtitle.font = .systemFont(ofSize: 13)
-        subtitle.textColor = Theme.secondary
+        let header = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 108))
         countLabel.font = .systemFont(ofSize: 12, weight: .medium)
         countLabel.textColor = Theme.accent
         countLabel.numberOfLines = 2
-        let stack = UIStackView(arrangedSubviews: [eyebrow, heading, subtitle, countLabel])
+        countLabel.accessibilityIdentifier = "sources.count"
+        groupButton.showsMenuAsPrimaryAction = true
+        groupButton.accessibilityIdentifier = "sources.groups"
+        filterButton.showsMenuAsPrimaryAction = true
+        filterButton.accessibilityIdentifier = "sources.filter"
+        let stack = UIStackView(arrangedSubviews: [countLabel, hstack([groupButton, UIView(), filterButton], spacing: 12)])
         stack.axis = .vertical
         stack.spacing = 13
         header.addSubview(stack)
@@ -53,12 +64,16 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
         observer = NotificationCenter.default.addObserver(forName: .sourcesChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.reload() }
         }
+        checkObserver = NotificationCenter.default.addObserver(forName: .yueduSourceChecksChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reload() }
+        }
         reload()
     }
 
     deinit {
         operation?.cancel()
         if let observer { NotificationCenter.default.removeObserver(observer) }
+        if let checkObserver { NotificationCenter.default.removeObserver(checkObserver) }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -68,15 +83,45 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
 
     private func reload() {
         let sources = SourceStore.shared.sources
+        let groups = Array(Set(sources.flatMap(\.discoveryGroups))).sorted()
+        if let group, !group.isEmpty, !groups.contains(group) { self.group = nil }
+        visible = YueduSourceChecker.shared.filtered(query: search.searchBar.text ?? "", group: group, filter: filter, sort: sorting)
+        selected.formIntersection(visible.map(\.id))
         let incompatible = sources.filter { !$0.isCompatible }.count
-        countLabel.text = "\(sources.count) 个书源  ·  \(sources.filter(\.enabled).count) 个已启用" + (incompatible > 0 ? "\n\(incompatible) 个配置需修正，已停用" : "")
+        countLabel.text = "显示 \(visible.count)/\(sources.count) 个 · \(sources.filter(\.enabled).count) 个已启用" + (managing ? " · 已选 \(selected.count) 个" : incompatible > 0 ? "\n\(incompatible) 个配置需修正，已停用" : "")
+        groupButton.setTitle((group.map { $0.isEmpty ? "未分组" : $0 } ?? "全部分组") + " ▾", for: .normal)
+        groupButton.menu = UIMenu(children: [(nil as String?, "全部分组"), ("", "未分组")] .map { value, title in
+            UIAction(title: title, state: group == value ? .on : .off) { [weak self] _ in self?.group = value; self?.changedFilter() }
+        } + groups.map { name in
+            UIAction(title: name, state: group == name ? .on : .off) { [weak self] _ in self?.group = name; self?.changedFilter() }
+        })
+        filterButton.setTitle(filter.title + " ▾", for: .normal)
+        filterButton.menu = UIMenu(children: YueduSourceFilter.allCases.map { value in
+            UIAction(title: value.title, state: filter == value ? .on : .off) { [weak self] _ in self?.filter = value; self?.changedFilter() }
+        } + [UIMenu(title: "排序", children: YueduSourceSort.allCases.map { value in
+            UIAction(title: value.title, state: sorting == value ? .on : .off) { [weak self] _ in self?.sorting = value; self?.reload() }
+        })])
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: managing ? "完成" : "管理", primaryAction: UIAction { [weak self] _ in
+            self?.managing.toggle()
+            self?.selected.removeAll()
+            self?.reload()
+        })
         table.reloadData()
+        renderBatchBar()
     }
+
+    func updateSearchResults(for searchController: UISearchController) { changedFilter() }
+    private func changedFilter() { selected.removeAll(); reload() }
 
     private func updateImportMenu() {
         navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "plus"), menu: UIMenu(children: [
             UIAction(title: "从文件导入", image: UIImage(systemName: "doc.badge.plus")) { [weak self] _ in self?.importFile() },
             UIAction(title: "从网址导入", image: UIImage(systemName: "link")) { [weak self] _ in self?.importURL() },
+            UIAction(title: "粘贴 JSON 导入", image: UIImage(systemName: "doc.on.clipboard")) { [weak self] _ in self?.importText() },
+            UIAction(title: "检测当前列表", image: UIImage(systemName: "stethoscope")) { [weak self] _ in
+                guard let self else { return }
+                self.openChecks(Set(self.visible.map(\.id)))
+            },
             UIAction(title: "新建书源", image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in self?.edit(nil) },
             UIAction(title: "上次导入详情", image: UIImage(systemName: "doc.text.magnifyingglass"), attributes: lastImportReport == nil ? .disabled : []) { [weak self] _ in
                 guard let self, let report = self.lastImportReport else { return }
@@ -88,7 +133,7 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
     }
 
     func numberOfSections(in tableView: UITableView) -> Int { 2 }
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { section == 0 ? max(1, SourceStore.shared.sources.count) : 1 }
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { section == 0 ? max(1, visible.count) : 1 }
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? { section == 0 ? "我的书源" : "使用指南" }
     func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         section == 0 ? "启用的文字书源会参与搜索。点击书源可编辑、登录或浏览分类；向左轻扫可移除。" : "导入 Legado 文字书源；漫画、有声和视频等类型会排除。需要登录或自定义参数的书源，请先打开“登录与设置”。"
@@ -107,12 +152,13 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
             cell.detailTextLabel?.text = "导入 JSON 书源，或从示例开始编辑"
             cell.imageView?.image = UIImage(systemName: "book.closed")
             cell.accessoryType = .disclosureIndicator
-        } else if SourceStore.shared.sources.isEmpty {
-            cell.textLabel?.text = "添加你的第一个书源"
-            cell.detailTextLabel?.text = "点击右上角 ＋，从文件或网址导入"
+        } else if visible.isEmpty {
+            cell.textLabel?.text = SourceStore.shared.sources.isEmpty ? "添加你的第一个书源" : "没有匹配的书源"
+            cell.detailTextLabel?.text = SourceStore.shared.sources.isEmpty ? "点击右上角 ＋，从文件或网址导入" : "轻点清除搜索和筛选"
             cell.imageView?.image = UIImage(systemName: "plus.circle")
         } else {
-            let source = SourceStore.shared.sources[indexPath.row]
+            let source = visible[indexPath.row]
+            cell.accessibilityIdentifier = "sources.row.\(source.bookSourceName)"
             let compatibilityIssues = source.compatibilityIssues
             cell.textLabel?.text = source.bookSourceName
             let host = URL(string: source.bookSourceUrl)?.host ?? source.bookSourceUrl
@@ -121,6 +167,15 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
                 cell.detailTextLabel?.textColor = UIColor(red: 0.56, green: 0.36, blue: 0.18, alpha: 1)
             } else {
                 cell.detailTextLabel?.text = "\(source.bookSourceGroup)\n\(host)"
+            }
+            if let result = YueduSourceChecker.shared.result(for: source) {
+                cell.detailTextLabel?.text = (cell.detailTextLabel?.text ?? "") + "\n\(result.title) · \(result.stage) · \(String(format: "%.1f", result.duration)) 秒"
+            }
+            cell.detailTextLabel?.numberOfLines = 0
+            if managing {
+                cell.accessoryType = selected.contains(source.id) ? .checkmark : .none
+                cell.accessibilityValue = selected.contains(source.id) ? "已选择" : "未选择"
+                return cell
             }
             let toggle = UISwitch()
             toggle.isOn = compatibilityIssues.isEmpty && source.enabled
@@ -141,13 +196,19 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         if indexPath.section == 1 { showGuide() }
-        else if SourceStore.shared.sources.isEmpty { importFile() }
-        else { edit(SourceStore.shared.sources[indexPath.row]) }
+        else if visible.isEmpty {
+            if SourceStore.shared.sources.isEmpty { importFile() }
+            else { group = nil; filter = .all; search.searchBar.text = ""; changedFilter() }
+        } else if managing {
+            let id = visible[indexPath.row].id
+            if !selected.insert(id).inserted { selected.remove(id) }
+            reload()
+        } else { edit(visible[indexPath.row]) }
     }
 
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
-        guard indexPath.section == 0, !SourceStore.shared.sources.isEmpty else { return nil }
-        let source = SourceStore.shared.sources[indexPath.row]
+        guard indexPath.section == 0, !visible.isEmpty, !managing else { return nil }
+        let source = visible[indexPath.row]
         let action = UIContextualAction(style: .destructive, title: "删除") { [weak self] _, _, done in
             let alert = UIAlertController(title: "删除“\(source.bookSourceName)”？", message: "已缓存的章节仍可阅读；未缓存章节将无法继续加载。建议先导出书源备份。", preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in done(false) })
@@ -224,17 +285,123 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
         navigationController?.pushViewController(SourceImportReportViewController(report: report), animated: true)
     }
 
-    private func exportSources() {
+    private func exportSources(ids: Set<UUID>? = nil) {
         guard !SourceStore.shared.sources.isEmpty else { showMessage("还没有书源", "添加书源后即可导出为 JSON 文件。"); return }
         do {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("阅读书源-\(UUID().uuidString.prefix(8)).json")
-            try SourceStore.shared.exportData().write(to: url, options: .atomic)
+            try (ids.map { try SourceStore.shared.exportData(ids: $0) } ?? SourceStore.shared.exportData()).write(to: url, options: .atomic)
             let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
             present(picker, animated: true)
         } catch { showMessage("导出失败", error.localizedDescription) }
     }
 
     private func edit(_ source: BookSource?) { navigationController?.pushViewController(SourceEditorViewController(source: source), animated: true) }
+
+    private func importText() {
+        let editor = YueduSourcePasteViewController()
+        editor.onImport = { [weak self] text in
+            self?.navigationController?.popViewController(animated: false)
+            self?.beginImport(status: "正在解析书源…") { try await SourceStore.shared.importDataAsync(Data(text.utf8)) }
+        }
+        navigationController?.pushViewController(editor, animated: true)
+    }
+
+    private func openChecks(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { showMessage("未选择书源", "先选择要检测的书源，或调整筛选范围。"); return }
+        search.isActive = false
+        navigationController?.pushViewController(YueduSourceCheckViewController(ids: ids), animated: true)
+    }
+
+    private func batchEdit(_ ids: Set<UUID>, edit: (inout BookSource) throws -> Void) {
+        do { try SourceStore.shared.manage(ids, edit: edit) }
+        catch { showMessage("未能保存", error.localizedDescription) }
+    }
+
+    private func assignGroup(_ ids: Set<UUID>, name: String) {
+        do { try SourceStore.shared.setGroup(ids: ids, name: name) }
+        catch { showMessage("未能设置分组", error.localizedDescription) }
+    }
+
+    private func renderBatchBar() {
+        batchBar?.removeFromSuperview()
+        batchBar = nil
+        table.contentInset.bottom = managing ? 76 : 0
+        guard managing else { return }
+        let ids = selected
+        let all = UIButton(type: .system)
+        let allSelected = !visible.isEmpty && selected.count == visible.count
+        all.setTitle(allSelected ? "取消全选" : "全选", for: .normal)
+        all.accessibilityIdentifier = "sources.selectAll"
+        all.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.selected = allSelected ? [] : Set(self.visible.map(\.id))
+            self.reload()
+        }, for: .touchUpInside)
+        let status = UIButton(type: .system)
+        status.setTitle("启停", for: .normal)
+        status.menu = UIMenu(children: [
+            UIAction(title: "启用所选") { [weak self] _ in self?.batchEdit(ids) { $0.enabled = true } },
+            UIAction(title: "停用所选") { [weak self] _ in self?.batchEdit(ids) { $0.enabled = false } },
+            UIAction(title: "开启发现") { [weak self] _ in self?.batchEdit(ids) { $0.rawFields["enabledExplore"] = .bool(true) } },
+            UIAction(title: "关闭发现") { [weak self] _ in self?.batchEdit(ids) { $0.rawFields["enabledExplore"] = .bool(false) } }
+        ])
+        status.showsMenuAsPrimaryAction = true
+        status.accessibilityIdentifier = "sources.batch.status"
+        let groups = UIButton(type: .system)
+        groups.setTitle("分组", for: .normal)
+        var groupActions = [UIAction(title: "设为未分组") { [weak self] _ in self?.assignGroup(ids, name: "") }]
+        groupActions += Array(Set(SourceStore.shared.sources.flatMap(\.discoveryGroups))).sorted().map { name in
+            UIAction(title: name) { [weak self] _ in self?.assignGroup(ids, name: name) }
+        }
+        groupActions.append(UIAction(title: "新建分组并移入") { [weak self] _ in
+            let alert = UIAlertController(title: "设置书源分组", message: "替换所选书源原有分组，不修改书源规则。", preferredStyle: .alert)
+            alert.addTextField { $0.placeholder = "例如：常用网文" }
+            alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+            alert.addAction(UIAlertAction(title: "保存", style: .default) { [weak self, weak alert] _ in
+                self?.assignGroup(ids, name: alert?.textFields?.first?.text ?? "")
+            })
+            self?.present(alert, animated: true)
+        })
+        groups.menu = UIMenu(children: groupActions)
+        groups.showsMenuAsPrimaryAction = true
+        groups.accessibilityIdentifier = "sources.batch.group"
+        let check = UIButton(type: .system)
+        check.setTitle("检测", for: .normal)
+        check.accessibilityIdentifier = "sources.batch.check"
+        check.addAction(UIAction { [weak self] _ in self?.openChecks(ids) }, for: .touchUpInside)
+        let more = UIButton(type: .system)
+        more.setTitle("更多", for: .normal)
+        more.accessibilityIdentifier = "sources.batch.more"
+        more.menu = UIMenu(children: [
+            UIAction(title: "导出所选书源") { [weak self] _ in self?.exportSources(ids: ids) },
+            UIAction(title: "删除所选书源", attributes: .destructive) { [weak self] _ in self?.confirmRemove(ids) }
+        ])
+        more.showsMenuAsPrimaryAction = true
+        [status, groups, check, more].forEach { $0.isEnabled = !ids.isEmpty }
+        let bar = hstack([all, status, groups, check, more], spacing: 4)
+        bar.distribution = .fillEqually
+        bar.backgroundColor = Theme.surface
+        bar.layer.cornerRadius = 14
+        view.addSubview(bar)
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            bar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            bar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            bar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            bar.heightAnchor.constraint(equalToConstant: 52)
+        ])
+        batchBar = bar
+    }
+
+    private func confirmRemove(_ ids: Set<UUID>) {
+        let alert = UIAlertController(title: "删除 \(ids.count) 个书源？", message: "书架中的书籍和已缓存正文保留，未缓存章节需要重新导入原书源或换源。可先导出所选书源备份。", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "删除", style: .destructive) { [weak self] _ in
+            do { try SourceStore.shared.remove(ids: ids) }
+            catch { self?.showMessage("删除失败", error.localizedDescription) }
+        })
+        present(alert, animated: true)
+    }
 
     private func showGuide() {
         let alert = UIAlertController(title: "从一份书源开始", message: "1. 导入 Legado JSON 书源，自动排除非文字类型。\n2. 需要账号或参数时，在书源编辑页打开“登录与设置”。\n3. 到“发现”搜索，或使用书源的“浏览分类”。\n\n网站是否可访问取决于书源地址和登录状态。示例连接 localhost，需要自行提供本地服务。", preferredStyle: .alert)

@@ -3,6 +3,9 @@ import UIKit
 final class ReadingSettingsViewController: UIViewController {
     var onChange: ((ReaderPreferences) -> Void)?
     var onDismiss: (() -> Void)?
+    var purificationBook: Book?
+    var purificationChapterTitle = "第一章 初见"
+    var purificationOriginal: String?
     private var preferences = ReaderPreferences.load()
     private let stack = UIStackView()
     private let preview = UILabel()
@@ -59,6 +62,17 @@ final class ReadingSettingsViewController: UIViewController {
             preview.bottomAnchor.constraint(equalTo: previewCard.bottomAnchor, constant: -22)
         ])
         stack.addArrangedSubview(previewCard)
+        let purification = UIButton(type: .system)
+        purification.setTitle("正文净化 · 规则与预览", for: .normal)
+        purification.contentHorizontalAlignment = .leading
+        purification.accessibilityIdentifier = "readingSettings.purification"
+        purification.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.navigationController?.pushViewController(YueduPurificationViewController(book: self.purificationBook,
+                chapterTitle: self.purificationChapterTitle, original: self.purificationOriginal), animated: true)
+            self.navigationController?.sheetPresentationController?.selectedDetentIdentifier = .large
+        }, for: .touchUpInside)
+        stack.addArrangedSubview(purification)
         let turnStyle = UISegmentedControl(items: ReaderPreferences.TurnStyle.allCases.map(\.title))
         turnStyle.selectedSegmentIndex = ReaderPreferences.TurnStyle.allCases.firstIndex(of: preferences.turnStyle) ?? 0
         turnStyle.accessibilityIdentifier = "readingSettings.turnStyle"
@@ -68,7 +82,7 @@ final class ReadingSettingsViewController: UIViewController {
             self.changed()
         }, for: .valueChanged)
         stack.addArrangedSubview(vstack([sectionTitle("翻页方式"), turnStyle,
-            textLabel("仿真模式可拖动页角或左右滑动，也可轻点左右区域翻页。", size: 12, color: Theme.secondary)
+            textLabel("平移模式可左右滑动，也可轻点左右区域翻页。", size: 12, color: Theme.secondary)
         ], spacing: 12))
         stack.addArrangedSubview(sliderSection(title: "文字大小", symbol: "textformat.size", valueLabel: fontValue,
                                               value: Float(preferences.fontSize), min: 16, max: 30, action: #selector(fontChanged(_:)), id: "fontSize"))

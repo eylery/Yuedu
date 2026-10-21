@@ -30,6 +30,9 @@ struct Book: Codable, Identifiable, Hashable {
     var addedAt = Date()
     var lastReadAt: Date? = nil
     var progress = ReadingProgress()
+    var shelf: YueduBookShelfInfo? = nil
+    var following: YueduFollowingInfo? = nil
+    var editionGroupID: UUID? = nil
 
     var fractionRead: Double {
         guard !chapters.isEmpty else { return 0 }

@@ -3,8 +3,9 @@ import UIKit
 /// Shared by the reader and the standalone reading preferences screen.
 struct ReaderPreferences {
     enum TurnStyle: String, CaseIterable {
-        case scroll, curl
-        var title: String { self == .scroll ? "上下滚动" : "仿真翻页" }
+        case scroll, slide
+
+        var title: String { self == .scroll ? "上下滚动" : "平移翻页" }
     }
     enum Paper: String, CaseIterable {
         case ivory, white, night
@@ -41,11 +42,15 @@ struct ReaderPreferences {
     static func load(defaults: UserDefaults = .standard) -> ReaderPreferences {
         let size = defaults.object(forKey: "reader.fontSize") as? Double ?? 21
         let spacing = defaults.object(forKey: "reader.lineSpacing") as? Double ?? 11
+        let savedTurnStyle = defaults.string(forKey: "reader.turnStyle") ?? ""
+        // Existing paged readers keep their mode when upgrading from page curl.
+        let turnStyle: TurnStyle = savedTurnStyle == "curl"
+            ? .slide : TurnStyle(rawValue: savedTurnStyle) ?? .scroll
         return ReaderPreferences(
             fontSize: CGFloat(size.isFinite ? min(30, max(16, size)) : 21),
             lineSpacing: CGFloat(spacing.isFinite ? min(22, max(4, spacing)) : 11),
             paper: Paper(rawValue: defaults.string(forKey: "reader.paper") ?? "") ?? .ivory,
-            turnStyle: TurnStyle(rawValue: defaults.string(forKey: "reader.turnStyle") ?? "") ?? .scroll
+            turnStyle: turnStyle
         )
     }
 

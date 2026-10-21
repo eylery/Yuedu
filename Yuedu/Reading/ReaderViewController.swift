@@ -5,6 +5,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private let bookID: UUID
     private var preferences = ReaderPreferences.load()
     private var chapterIndex = 0
+    private var activeChapterID: UUID?
     private var contentAvailable = false
     private var isVisible = false
     private var hasAppeared = false
@@ -14,6 +15,10 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private var pendingFraction: Double?
     private var previousNavigationBarHidden = false
     private var loadTask: Task<Void, Never>?
+    private var purificationTask: Task<Void, Never>?
+    private var purificationToken = UUID()
+    private var originalBody = ""
+    private var displayedBody = ""
     private var saveWork: DispatchWorkItem?
     private var sessionStarted: TimeInterval?
     private var sessionTimer: Timer?
@@ -37,6 +42,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private let activity = UIActivityIndicatorView(style: .medium)
     private let statusLabel = UILabel()
     private let retryButton = UIButton(type: .system)
+    private let switchSourceButton = UIButton(type: .system)
     private let footer = UIView()
     private let progressView = UIProgressView(progressViewStyle: .bar)
     private let progressLabel = UILabel()
@@ -60,6 +66,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     deinit {
         loadTask?.cancel()
+        purificationTask?.cancel()
         saveWork?.cancel()
         sessionTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
@@ -75,6 +82,8 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         applyPalette()
         NotificationCenter.default.addObserver(self, selector: #selector(enterBackground), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(enterForeground), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(catalogChanged(_:)), name: .yueduCatalogChanged, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(purificationChanged), name: .yueduPurificationChanged, object: nil)
         if let book, !book.chapters.isEmpty {
             chapterIndex = min(max(0, book.progress.chapterIndex), book.chapters.count - 1)
             showChapter(at: chapterIndex, fraction: book.progress.scrollFraction, saveCurrent: false)
@@ -171,7 +180,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         pageReader.didMove(toParent: self)
         pageReader.view.isHidden = true
         pageReader.onPositionChanged = { [weak self] in
-            guard let self, self.contentAvailable, self.preferences.turnStyle == .curl else { return }
+            guard let self, self.contentAvailable, self.preferences.turnStyle == .slide else { return }
             self.restorePositionIfNeeded()
             self.updateProgressDisplay()
             if !self.isChangingSize { self.persistProgress() }
@@ -189,6 +198,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         sourceLabel.font = .systemFont(ofSize: 10, weight: .regular)
         sourceLabel.textAlignment = .center
         sourceLabel.text = "把时间，留给阅读"
+        sourceLabel.accessibilityIdentifier = "reader.purificationStatus"
         let titleStack = UIStackView(arrangedSubviews: [bookLabel, sourceLabel])
         titleStack.axis = .vertical
         titleStack.spacing = 6
@@ -253,6 +263,11 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         retryButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
         retryButton.addTarget(self, action: #selector(retryChapter), for: .touchUpInside)
         statusStack.addArrangedSubview(retryButton)
+        switchSourceButton.setTitle("换个书源继续读", for: .normal)
+        switchSourceButton.accessibilityIdentifier = "reader.switchSource"
+        switchSourceButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        switchSourceButton.addTarget(self, action: #selector(switchSource), for: .touchUpInside)
+        statusStack.addArrangedSubview(switchSourceButton)
         contentStack.addArrangedSubview(statusStack)
         contentStack.addArrangedSubview(endLabel)
         chapterEndButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .medium)
@@ -340,11 +355,16 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         finishReadingSession()
         stopSpeaking()
         loadTask?.cancel()
+        purificationTask?.cancel()
+        purificationToken = UUID()
+        originalBody = ""
+        displayedBody = ""
         saveWork?.cancel()
         chapterIndex = index
         pendingFraction = fraction.isFinite ? min(1, max(0, fraction)) : 0
         contentAvailable = false
         let selected = book.chapters[index]
+        activeChapterID = selected.id
         bookLabel.text = book.title
         chapterNumber.text = String(format: "CHAPTER  %02d", index + 1)
         chapterTitle.text = selected.title
@@ -368,6 +388,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
             return
         }
         setStatus("正在载入这一章…", loading: true, retry: false)
+        let cacheRevision = LibraryStore.shared.cacheRevision(for: bookID)
         loadTask = Task { [weak self] in
             do {
                 let content = try await SourceEngine.shared.loadChapter(selected, sourceID: book.sourceID, book: book)
@@ -377,7 +398,11 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
                     self.setStatus("本章没有获取到正文，请检查书源规则后重试。", loading: false, retry: true)
                     return
                 }
-                LibraryStore.shared.updateChapterContent(bookID: self.bookID, chapterID: selected.id, text: content)
+                guard try LibraryStore.shared.cacheChapterContent(bookID: self.bookID, chapterID: selected.id,
+                                                                 text: content, revision: cacheRevision) else {
+                    self.setStatus("缓存或目录已变化，请重新加载这一章。", loading: false, retry: true)
+                    return
+                }
                 self.displayContent(content)
             } catch {
                 guard !Task.isCancelled, let self, self.chapter?.id == selected.id else { return }
@@ -387,8 +412,50 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     }
 
     private func displayContent(_ text: String) {
+        purificationTask?.cancel()
+        let token = UUID()
+        purificationToken = token
+        originalBody = text
+        guard let chapter, let book else { return }
+        let settings = YueduPurificationStore.shared.settings
+        guard settings.enabled, !settings.originalBookIDs.contains(bookID),
+              settings.rules.contains(where: { $0.applies(bookID: bookID, sourceID: book.sourceID) }) else {
+            renderContent(YueduPurificationResult(text: text))
+            return
+        }
+        setStatus("正在整理正文…", loading: true, retry: false)
+        purificationTask = Task { [weak self] in
+            do {
+                let result = try await YueduTextPurifier.process(text, chapterTitle: chapter.title, bookID: book.id, sourceID: book.sourceID, settings: settings)
+                try Task.checkCancellation()
+                guard let self, self.purificationToken == token, self.chapter?.id == chapter.id else { return }
+                self.renderContent(result)
+            } catch {
+                guard !Task.isCancelled, let self, self.purificationToken == token else { return }
+                self.renderContent(YueduPurificationResult(text: text, warnings: ["净化失败，已显示原文。"], restoredOriginal: true))
+            }
+        }
+    }
+
+    @objc private func purificationChanged() {
+        guard isVisible || readingToolsOpen || !hasAppeared else { return }
+        guard !originalBody.isEmpty else { return }
+        pendingFraction = currentFraction
+        saveWork?.cancel()
+        stopSpeaking()
+        displayContent(originalBody)
+    }
+
+    private func renderContent(_ result: YueduPurificationResult) {
+        // Keep the pending fraction until the newly visible text and its scroll
+        // content have both been laid out. The loading view can be much shorter.
+        isRestoring = true
+        displayedBody = result.text
+        if !result.warnings.isEmpty { sourceLabel.text = "净化有提示 · 请在设置中预览" }
+        else if !result.hits.isEmpty { sourceLabel.text = "已净化 \(result.hits.values.reduce(0, +)) 处 · 原文已保留" }
+        else { sourceLabel.text = "把时间，留给阅读" }
         contentAvailable = true
-        bodyLabel.attributedText = preferences.attributedText(text)
+        bodyLabel.attributedText = preferences.attributedText(displayedBody)
         bodyLabel.isHidden = false
         endLabel.isHidden = false
         chapterEndButton.isHidden = false
@@ -399,6 +466,9 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         configurePages(preservePosition: false)
         view.setNeedsLayout()
         view.layoutIfNeeded()
+        contentStack.layoutIfNeeded()
+        scrollView.layoutIfNeeded()
+        isRestoring = false
         restorePositionIfNeeded()
         startReadingSession()
         persistProgress()
@@ -414,6 +484,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         statusStack.isHidden = false
         statusLabel.text = text
         retryButton.isHidden = !retry
+        switchSourceButton.isHidden = !retry || book?.sourceID == nil
         activity.isHidden = !loading
         loading ? activity.startAnimating() : activity.stopAnimating()
         bookmarkButton.isEnabled = false
@@ -425,15 +496,15 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     private var currentFraction: Double {
         if let pendingFraction { return pendingFraction }
-        if preferences.turnStyle == .curl, contentAvailable { return pageReader.fraction }
+        if preferences.turnStyle == .slide, contentAvailable { return pageReader.fraction }
         let distance = scrollView.contentSize.height - scrollView.bounds.height
         guard distance > 0 else { return contentAvailable ? 1 : 0 }
         return min(1, max(0, Double(scrollView.contentOffset.y / distance)))
     }
 
     private func restorePositionIfNeeded() {
-        guard contentAvailable, !isChangingSize, let fraction = pendingFraction, scrollView.bounds.height > 0 else { return }
-        if preferences.turnStyle == .curl {
+        guard !isRestoring, contentAvailable, !isChangingSize, let fraction = pendingFraction, scrollView.bounds.height > 0 else { return }
+        if preferences.turnStyle == .slide {
             guard pageReader.isReady else { return }
             pendingFraction = nil
             updateProgressDisplay()
@@ -467,12 +538,29 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         let overall = (Double(chapterIndex) + fraction) / Double(book.chapters.count)
         progressView.progress = Float(overall)
         progressLabel.text = "第 \(chapterIndex + 1) / \(book.chapters.count) 章    ·    \(Int(overall * 100))%"
-        if preferences.turnStyle == .curl, contentAvailable {
+        if preferences.turnStyle == .slide, contentAvailable {
             progressLabel.text! += "    ·    \(pageReader.pageDescription)"
         }
         let hasBookmark = nearbyBookmark != nil
         bookmarkButton.setImage(UIImage(systemName: hasBookmark ? "bookmark.fill" : "bookmark"), for: .normal)
         bookmarkButton.accessibilityLabel = hasBookmark ? "移除此处书签" : "添加书签"
+    }
+
+    @objc private func catalogChanged(_ notification: Notification) {
+        guard notification.object as? UUID == bookID, let book else { return }
+        guard let index = book.chapters.firstIndex(where: { $0.id == activeChapterID }) else {
+            showChapter(at: book.progress.chapterIndex, fraction: book.progress.scrollFraction, saveCurrent: false)
+            return
+        }
+        // A foreground update can insert chapters while this reader remains visible.
+        // Follow the displayed chapter identity without resetting its text or position.
+        chapterIndex = index
+        chapterNumber.text = String(format: "CHAPTER  %02d", index + 1)
+        previousButton.isEnabled = index > 0
+        nextButton.isEnabled = index + 1 < book.chapters.count
+        chapterEndButton.setTitle(nextButton.isEnabled ? "下一章  →" : "已读至全书末尾", for: .normal)
+        chapterEndButton.isEnabled = nextButton.isEnabled
+        updateProgressDisplay()
     }
 
     private var nearbyBookmark: Bookmark? {
@@ -481,23 +569,27 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     private func applyPreferences(_ preferences: ReaderPreferences) {
         if contentAvailable { pendingFraction = currentFraction }
-        let preservePage = self.preferences.turnStyle == .curl
+        isRestoring = true
+        let preservePage = self.preferences.turnStyle == .slide
         self.preferences = preferences
-        if contentAvailable, let chapter { bodyLabel.attributedText = preferences.attributedText(chapter.content) }
+        if contentAvailable { bodyLabel.attributedText = preferences.attributedText(displayedBody) }
         if contentAvailable { configurePages(preservePosition: preservePage) }
         applyPalette()
         view.setNeedsLayout()
         view.layoutIfNeeded()
+        contentStack.layoutIfNeeded()
+        scrollView.layoutIfNeeded()
+        isRestoring = false
         restorePositionIfNeeded()
     }
 
     private func configurePages(preservePosition: Bool) {
-        let paged = preferences.turnStyle == .curl && contentAvailable
+        let paged = preferences.turnStyle == .slide && contentAvailable
         pageReader.view.isHidden = !paged
         scrollView.isHidden = paged
         guard paged, let chapter, let book else { return }
         let text = NSMutableAttributedString(attributedString: preferences.attributedText(chapter.title + "\n", size: 28))
-        text.append(preferences.attributedText(chapter.content))
+        text.append(preferences.attributedText(displayedBody))
         pageReader.configure(
             text: text, paper: preferences.paper, fraction: pendingFraction ?? 0,
             preservePosition: preservePosition, hasPrevious: chapterIndex > 0,
@@ -523,7 +615,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         activity.color = paper.ink
         chapterEndButton.backgroundColor = paper.rule
         chapterEndButton.setTitleColor(paper.ink, for: .normal)
-        for button in [backButton, bookmarkButton, detailsButton, previousButton, nextButton, retryButton] + toolButtons { button.tintColor = paper.ink }
+        for button in [backButton, bookmarkButton, detailsButton, previousButton, nextButton, retryButton, switchSourceButton] + toolButtons { button.tintColor = paper.ink }
         setNeedsStatusBarAppearanceUpdate()
     }
 
@@ -566,6 +658,14 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         navigationController?.pushViewController(YueduBookDetailViewController(bookID: bookID), animated: true)
     }
 
+    @objc private func switchSource() {
+        persistProgress()
+        let progress = ReadingProgress(chapterIndex: chapterIndex, scrollFraction: currentFraction)
+        navigationController?.pushViewController(
+            OnlineSearchViewController(switchingBookID: bookID, switchingProgress: progress), animated: true
+        )
+    }
+
     private func presentContents(bookmarks: Bool) {
         guard let book else { return }
         let controller = ReaderContentsViewController(book: book, currentChapter: chapterIndex, bookmarksSelected: bookmarks)
@@ -577,6 +677,9 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     @objc private func openSettings() {
         let settings = ReadingSettingsViewController()
+        settings.purificationBook = book
+        settings.purificationChapterTitle = chapter?.title ?? ""
+        settings.purificationOriginal = originalBody.isEmpty ? nil : originalBody
         settings.onChange = { [weak self] preferences in self?.applyPreferences(preferences) }
         settings.onDismiss = { [weak self] in self?.resumeAfterReadingTools() }
         presentSheet(settings)
@@ -620,11 +723,11 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     }
 
     private func startSpeaking() {
-        guard let chapter, !chapter.content.isEmpty else { return }
+        guard let chapter, !displayedBody.isEmpty else { return }
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: .duckOthers)
             try AVAudioSession.sharedInstance().setActive(true)
-            let utterance = AVSpeechUtterance(string: chapter.title + "。" + chapter.content)
+            let utterance = AVSpeechUtterance(string: chapter.title + "。" + displayedBody)
             utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
             utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.85
             synthesizer.speak(utterance)

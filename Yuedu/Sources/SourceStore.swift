@@ -181,6 +181,33 @@ final class SourceStore {
 
     func exportData() throws -> Data { try Self.encode(sources) }
 
+    func exportData(ids: Set<UUID>) throws -> Data {
+        try Self.encode(sources.filter { ids.contains($0.id) })
+    }
+
+    /// Validate the entire selection before one atomic write.
+    func manage(_ ids: Set<UUID>, edit: (inout BookSource) throws -> Void) throws {
+        var updated = sources
+        for index in updated.indices where ids.contains(updated[index].id) {
+            try edit(&updated[index])
+            try updated[index].validateStructure()
+            if updated[index].enabled { try updated[index].validate() }
+        }
+        try commit(updated)
+    }
+
+    func remove(ids: Set<UUID>) throws {
+        try commit(sources.filter { !ids.contains($0.id) })
+    }
+
+    func setGroup(ids: Set<UUID>, name: String) throws {
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.count <= 40, !cleaned.contains(where: { ",;，；\n".contains($0) }) else {
+            throw SourceError.invalid("请输入不含分隔符的分组名，最多 40 个字。")
+        }
+        try manage(ids) { $0.bookSourceGroup = cleaned }
+    }
+
     static func encode<T: Encodable>(_ value: T) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

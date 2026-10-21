@@ -81,10 +81,10 @@ final class SourceEngine {
         return (data, response)
     }
 
-    func search(source: BookSource, query: String, page: Int = 1) async throws -> [SourceSearchResult] {
+    func search(source: BookSource, query: String, page: Int = 1, timeout: TimeInterval = 120) async throws -> [SourceSearchResult] {
         try source.validate()
         guard source.enabled else { throw SourceError.invalid("此书源已停用。") }
-        let output = try await execute("search", source: source, payload: ["query": query, "page": page])
+        let output = try await execute("search", source: source, payload: ["query": query, "page": page], timeout: timeout)
         return try searchResults(output, source: source)
     }
 
@@ -93,7 +93,7 @@ final class SourceEngine {
         return try await loadBook(result, source: source)
     }
 
-    func loadBook(_ result: SourceSearchResult, source: BookSource) async throws -> Book {
+    func loadBook(_ result: SourceSearchResult, source: BookSource, timeout: TimeInterval = 120) async throws -> Book {
         try source.validate()
         guard source.enabled else { throw SourceError.invalid("此书源已停用，请先启用。") }
         var context = try Self.object(result.context)
@@ -101,7 +101,7 @@ final class SourceEngine {
         context["author"] = result.author
         context["intro"] = result.summary
         context["bookUrl"] = result.bookURL
-        let output = try await execute("book", source: source, payload: ["book": context])
+        let output = try await execute("book", source: source, payload: ["book": context], timeout: timeout)
         let info = output["book"] as? [String: Any] ?? context
         let rows = output["chapters"] as? [[String: Any]] ?? []
         let chapters = try rows.map { row in
@@ -115,6 +115,11 @@ final class SourceEngine {
     func loadChapter(_ chapter: BookChapter, sourceID: UUID?, book: Book? = nil) async throws -> String {
         if !chapter.content.isEmpty { return chapter.content }
         guard let sourceID, let source = sourceStore.source(id: sourceID) else { throw SourceError.invalid("找不到此书的书源，请重新导入原书源。") }
+        return try await loadChapter(chapter, source: source, book: book)
+    }
+
+    func loadChapter(_ chapter: BookChapter, source: BookSource, book: Book? = nil, timeout: TimeInterval = 120) async throws -> String {
+        let sourceID = source.id
         try source.validate()
         guard source.enabled else { throw SourceError.invalid("此书源已停用，请先启用。") }
         var context = try Self.object(chapter.sourceContext)
@@ -128,7 +133,7 @@ final class SourceEngine {
             bookContext["bookUrl"] = book.bookURL ?? ""; bookContext["durChapterIndex"] = book.progress.chapterIndex
             bookContext["durChapterTitle"] = chapter.title
         }
-        let output = try await execute("chapter", source: source, payload: ["book": bookContext, "chapter": context])
+        let output = try await execute("chapter", source: source, payload: ["book": bookContext, "chapter": context], timeout: timeout)
         guard let content = output["content"] as? String, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SourceError.empty("未解析到正文。") }
         return content
     }
@@ -168,7 +173,8 @@ final class SourceEngine {
     func categories(source: BookSource) async throws -> [SourceCategory] {
         let result = try await execute("categories", source: source)
         return (result["categories"] as? [[String: Any]] ?? []).compactMap { value in
-            guard let title = value["title"] as? String, let url = value["url"] as? String, !title.isEmpty, !url.isEmpty else { return nil }
+            guard let title = value["title"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            let url = value["url"] as? String ?? ""
             return SourceCategory(title: title, url: url)
         }
     }

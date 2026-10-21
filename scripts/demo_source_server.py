@@ -18,6 +18,9 @@ TEXT = {
 
 class Handler(BaseHTTPRequestHandler):
     polish_toc_requests = 0
+    switch_preview_requests = 0
+    cache_counts = {}
+    online_retry_requests = 0
     background_lock = threading.Lock()
     background_completed = []
     background_offline = False
@@ -90,6 +93,70 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep(5)
             result = {"content": f"第{background_chapter}章的正文已由系统下载。\n" +
                       "晨光落在纸上，翻过这一页，故事还在继续。\n" * 30}
+        elif parsed.path == "/cache/reset":
+            Handler.cache_counts = {}
+            result = {"reset": True}
+        elif parsed.path == "/cache/stats":
+            result = {"counts": Handler.cache_counts}
+        elif parsed.path == "/cache-source.json":
+            with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
+                template = json.load(file)
+            if isinstance(template, list):
+                template = template[0]
+            result = dict(template, bookSourceName="缓存管理测试源", enabled=True, concurrentRate="100",
+                          bookSourceUrl="http://localhost:8080/cache", searchUrl="/cache/search?q={{key}}")
+        elif parsed.path == "/cache/search":
+            result = {"books": [{"name": "缓存管理手记", "author": "阅读测试", "url": "/cache/book", "intro": "章节清理与下载任务测试。"}]}
+        elif parsed.path == "/cache/book":
+            result = {"tocUrl": "/cache/toc"}
+        elif parsed.path == "/cache/toc":
+            result = {"chapters": [{"title": f"第{i}章 缓存测试", "url": f"/cache/chapter/{i}"} for i in range(1, 6)]}
+        elif parsed.path.startswith("/cache/chapter/"):
+            index = parsed.path.rsplit("/", 1)[-1]
+            Handler.cache_counts[index] = Handler.cache_counts.get(index, 0) + 1
+            attempt = Handler.cache_counts[index]
+            if index == "2":
+                time.sleep(4)
+            result = {"content": "" if index == "3" and attempt == 1 else f"第{index}章缓存管理正文。\n" + "晨光落在书页上，故事还在继续。\n" * 45}
+        elif parsed.path == "/switch/reset":
+            Handler.switch_preview_requests = 0
+            result = {"reset": True}
+        elif parsed.path == "/switch-sources.json":
+            with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
+                template = json.load(file)
+            if isinstance(template, list):
+                template = template[0]
+            result = [dict(template, bookSourceName=name, enabled=True,
+                           bookSourceUrl=f"http://localhost:8080/switch/{edition}",
+                           searchUrl=f"/switch/{edition}/search?q={{{{key}}}}")
+                      for edition, name in [("original", "换源测试·原源"),
+                                            ("alternate", "换源测试·备用"),
+                                            ("unrelated", "换源测试·同名异书")]]
+        elif parsed.path.startswith("/switch/"):
+            _, _, edition, action, *rest = parsed.path.split("/")
+            if action == "search":
+                result = {"books": [{"name": "换源测试小说", "author": "不同作者" if edition == "unrelated" else "阅读测试",
+                                     "url": f"/switch/{edition}/book", "intro": "换源与试读验证。"}]}
+            elif action == "book":
+                result = {"tocUrl": f"/switch/{edition}/toc"}
+            elif action == "toc":
+                titles = ["第一章 初见", "第二章 重逢"] if edition == "original" else (
+                    ["序章", "第1章：初见", "第2章：重逢"] if edition == "alternate" else ["第一章 不同故事"])
+                result = {"chapters": [{"title": title, "url": f"/switch/{edition}/chapter/{index}"}
+                                       for index, title in enumerate(titles)]}
+            elif action == "chapter":
+                index = int(rest[0])
+                if edition == "original" and index == 1:
+                    result = {"content": ""}
+                elif edition == "alternate" and index == 2:
+                    Handler.switch_preview_requests += 1
+                    if Handler.switch_preview_requests == 2:
+                        time.sleep(4)
+                    result = {"content": "" if Handler.switch_preview_requests == 1 else "备用版本重逢正文。\n" + "重逢后，故事继续。\n" * 40}
+                else:
+                    result = {"content": ("原版本初见正文。" if edition == "original" else "此版本的试读正文。") + "\n风从书页间吹过。" * 40}
+            else:
+                result = {"error": "Unknown switch fixture action"}
         elif parsed.path == "/polish/reset":
             Handler.polish_toc_requests = 0
             result = {"reset": True}
@@ -128,6 +195,100 @@ class Handler(BaseHTTPRequestHandler):
             result = {"chapters": CHAPTERS}
         elif parsed.path in TEXT:
             result = {"content": TEXT[parsed.path]}
+        elif parsed.path == "/discovery-sources.json":
+            with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
+                template = json.load(file)
+            if isinstance(template, list):
+                template = template[0]
+            base = "http://" + self.headers.get("Host", "localhost:8080")
+            def source(name, suffix, group, explore, **extra):
+                return dict(template, bookSourceName=name, bookSourceUrl=base + suffix,
+                            enabled=True, bookSourceGroup=group, exploreUrl=explore,
+                            ruleExplore=template["ruleSearch"], **extra)
+            result = [
+                source("本地发现·分类", "/discover-main", "小说,测试", json.dumps([
+                    {"title": "榜单", "url": ""},
+                    {"title": "热门榜单", "url": "/discovery/list?page={{page}}"},
+                    {"title": "新书", "url": "/discovery/list?page={{page}}"},
+                    {"title": "完本", "url": "/discovery/list?page={{page}}"},
+                    {"title": "分类", "url": ""},
+                    {"title": "玄幻", "url": "/discovery/list?page={{page}}"},
+                    {"title": "都市", "url": "/discovery/list?page={{page}}"},
+                ], ensure_ascii=False)),
+                source("本地发现·动态", "/discover-script", "文学", "@js:JSON.stringify([{title:'本地故事',url:'/discovery/list?page={{page}}'}])"),
+                source("本地发现·故障", "/discover-error", "测试", "@js:throw new Error('测试分类故障')"),
+                source("仅搜索书源", "/discover-search", "测试", ""),
+                source("已关闭发现", "/discover-hidden", "测试", "隐藏::/search", enabledExplore=False),
+            ]
+        elif parsed.path == "/discovery/list":
+            page = int(parse_qs(parsed.query).get("page", ["1"])[0])
+            result = {"books": ([{"name": "春日手记" if page == 1 else "夏夜手记",
+                                 "author": "阅读示例", "url": "/books/1" if page == 1 else "/books/2",
+                                 "intro": "发现分类与分页测试书籍。"}] if page in [1, 2] else [])}
+        elif parsed.path in ["/books/2", "/books/3"]:
+            result = {"tocUrl": "/books/1/toc"}
+        elif parsed.path == "/purification-source.json":
+            with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
+                template = json.load(file)
+            if isinstance(template, list):
+                template = template[0]
+            result = dict(template, bookSourceName="净化测试书源", enabled=True,
+                          bookSourceUrl="http://localhost:8080/purification",
+                          searchUrl="/purification/search?q={{key}}")
+        elif parsed.path == "/purification/search":
+            result = {"books": [{"name": "净化测试手记", "author": "阅读测试", "url": "/purification/book", "intro": "原文缓存与净化测试。"}]}
+        elif parsed.path == "/purification/book":
+            result = {"tocUrl": "/purification/toc"}
+        elif parsed.path == "/purification/toc":
+            result = {"chapters": [{"title": "第一章 初见", "url": "/purification/chapter/1"},
+                                   {"title": "第二章 重逢", "url": "/purification/chapter/2"}]}
+        elif parsed.path.startswith("/purification/chapter/"):
+            number = parsed.path.rsplit("/", 1)[1]
+            title = "第一章 初见" if number == "1" else "第二章 重逢"
+            result = {"content": title + "\n\n推广：净化测试广告\n\n" +
+                      "正文应始终保留，窗边的风轻轻吹过。\n\n" * 40}
+        elif parsed.path == "/online-sources.json":
+            Handler.online_retry_requests = 0
+            with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
+                template = json.load(file)
+            if isinstance(template, list):
+                template = template[0]
+            result = [dict(template, bookSourceName=name,
+                           bookSourceUrl=f"http://localhost:8080/online-{kind}",
+                           bookSourceGroup=group, enabled=True,
+                           searchUrl=f"/online/search/{kind}?q={{{{key}}}}&page={{{{page}}}}")
+                      for name, kind, group in [("搜索测试·一号", "first", "常用"),
+                                                ("搜索测试·二号", "second", "常用"),
+                                                ("搜索测试·重试", "retry", "备用")]]
+        elif parsed.path.startswith("/online/search/"):
+            kind = parsed.path.rsplit("/", 1)[1]
+            page = int(parse_qs(parsed.query).get("page", ["1"])[0])
+            if kind == "retry":
+                Handler.online_retry_requests += 1
+                if Handler.online_retry_requests == 1:
+                    self.send_error(503, "Temporary search failure: retry this source")
+                    return
+            exact = {"name": "春日手记", "author": "阅读示例", "url": "/books/1", "intro": "跨源同书与搜索分页测试。"}
+            author = {"name": "远山故事", "author": "春日手记", "url": "/books/2", "intro": "按作者筛选的测试作品。"}
+            more = {"name": "夏夜手记", "author": "阅读示例", "url": "/books/3", "intro": "第二页新增结果。"}
+            recovered = {"name": "冬日手记", "author": "阅读示例", "url": "/books/1", "intro": "重试失败书源后返回的结果。"}
+            if kind == "first":
+                books = [exact, exact, author] if page == 1 else ([exact, more] if page == 2 else [])
+            elif kind == "second":
+                books = [exact]  # Intentionally ignores page; the app must stop repeated pages.
+            else:
+                books = [recovered]
+            result = {"books": books}
+        elif parsed.path == "/source-tools.json":
+            with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
+                template = json.load(file)
+            if isinstance(template, list):
+                template = template[0]
+            result = [
+                dict(template, bookSourceName="工具测试·正常", bookSourceUrl="http://localhost:8080/tools-good", enabled=False, bookSourceGroup="网文", exploreUrl="热门::/search", ruleExplore=template["ruleSearch"]),
+                dict(template, bookSourceName="工具测试·故障", bookSourceUrl="http://localhost:8080/tools-fail", enabled=True, bookSourceGroup="网文", searchUrl="/missing-tools-endpoint?q={{key}}"),
+                dict(template, bookSourceName="工具测试·空结果", bookSourceUrl="http://localhost:8080/tools-empty", enabled=True, bookSourceGroup="备用", searchUrl="/search?q=no-matching-book"),
+            ]
         elif parsed.path == "/source.json":
             with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
                 result = json.load(file)

@@ -42,7 +42,7 @@ final class YueduUITests: XCTestCase {
         XCTAssertTrue(app.cells.staticTexts["浮生六记"].waitForExistence(timeout: 3))
         app.navigationBars.buttons.firstMatch.tap()
         app.tabBars.buttons["发现"].tap()
-        XCTAssertTrue(app.buttons["探索你的书源"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["discovery.searchBooks"].waitForExistence(timeout: 3))
         app.tabBars.buttons["书源"].tap()
         XCTAssertTrue(app.navigationBars["书源"].waitForExistence(timeout: 3))
         app.tabBars.buttons["我的"].tap()
