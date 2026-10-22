@@ -14,14 +14,16 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
     private var observer: NSObjectProtocol?
     private var followingObserver: NSObjectProtocol?
     private var importing = false
+    private var needsRender = true
+    private var isShelfVisible = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
         observer = NotificationCenter.default.addObserver(forName: .libraryChanged, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.render() }
+            MainActor.assumeIsolated { self?.refreshWhenVisible() }
         }
         followingObserver = NotificationCenter.default.addObserver(forName: .yueduFollowingChanged, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.render() }
+            MainActor.assumeIsolated { self?.refreshWhenVisible() }
         }
         let refresh = UIRefreshControl()
         refresh.addTarget(self, action: #selector(checkUpdates), for: .valueChanged)
@@ -35,6 +37,22 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
         if let followingObserver { NotificationCenter.default.removeObserver(followingObserver) }
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        isShelfVisible = true
+        if needsRender { render() }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        isShelfVisible = false
+    }
+
+    private func refreshWhenVisible() {
+        needsRender = true
+        if isShelfVisible { render() }
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         if let error = LibraryStore.shared.persistenceError { showMessage("存储提示", error) }
@@ -42,6 +60,7 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
 
     private func render() {
         guard isViewLoaded else { return }
+        needsRender = false
         let store = LibraryStore.shared
         if let groupID, !store.shelfGroups.contains(where: { $0.id == groupID }) {
             self.groupID = nil
@@ -423,7 +442,12 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
         alert.addAction(UIAlertAction(title: "导入 TXT / EPUB 文件", style: .default) { [weak self] _ in self?.presentImporter() })
         alert.addAction(UIAlertAction(title: "离线试读 · 浮生六记", style: .default) { [weak self] _ in
             guard let sample = SampleLibrary.books.first(where: { $0.title == "浮生六记" }) else { return }
-            self?.pushReader(LibraryStore.shared.add(sample))
+            let saved = LibraryStore.shared.add(sample)
+            if let error = LibraryStore.shared.persistenceError {
+                self?.showMessage("保存失败", error)
+                return
+            }
+            self?.pushReader(saved)
         })
         alert.addAction(UIAlertAction(title: "取消", style: .cancel))
         alert.popoverPresentationController?.sourceView = view

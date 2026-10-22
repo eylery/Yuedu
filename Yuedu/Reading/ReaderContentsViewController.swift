@@ -4,8 +4,11 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
     var onSelect: ((Int, Double) -> Void)?
     var onBookmarksChanged: (() -> Void)?
     var onDismiss: (() -> Void)?
-    private let book: Book
-    private let currentChapter: Int
+    private var book: Book
+    private let library: LibraryStore
+    private let currentChapterID: UUID?
+    private var observer: NSObjectProtocol?
+    private var currentChapter = -1
     private let segments = UISegmentedControl(items: ["章节目录", "我的书签"])
     private let table = UITableView(frame: .zero, style: .plain)
     private let emptyLabel = UILabel()
@@ -14,27 +17,22 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
     private var cachedOnly = false
     private let bookmarksInitiallySelected: Bool
     private var query: String { (search.searchBar.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var bookmarks: [Bookmark] {
-        LibraryStore.shared.bookmarks.filter {
-            $0.bookID == book.id && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query))
-        }
-    }
-    private var chapterIndices: [Int] {
-        let indices = book.chapters.indices.filter {
-            (query.isEmpty || book.chapters[$0].title.localizedCaseInsensitiveContains(query) || String($0 + 1) == query)
-                && (!cachedOnly || !book.chapters[$0].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-        return reversed ? Array(indices.reversed()) : indices
-    }
+    private var bookmarks: [Bookmark] = []
+    private var chapterIndices: [Int] = []
     private var showingBookmarks: Bool { segments.selectedSegmentIndex == 1 }
 
-    init(book: Book, currentChapter: Int, bookmarksSelected: Bool) {
+    init(book: Book, currentChapter: Int, bookmarksSelected: Bool, library: LibraryStore? = nil) {
         self.book = book
-        self.currentChapter = currentChapter
+        self.library = library ?? .shared
+        self.currentChapterID = book.chapters.indices.contains(currentChapter) ? book.chapters[currentChapter].id : nil
         self.bookmarksInitiallySelected = bookmarksSelected
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -83,7 +81,10 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
         emptyLabel.textAlignment = .center
         emptyLabel.font = .systemFont(ofSize: 15)
         emptyLabel.textColor = Theme.secondary
-        updateEmptyState()
+        observer = NotificationCenter.default.addObserver(forName: .libraryChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reloadContents() }
+        }
+        reloadContents()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -133,26 +134,64 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
         let index: Int
         let fraction: Double
         if showingBookmarks {
+            guard bookmarks.indices.contains(indexPath.row) else { return }
             let bookmark = bookmarks[indexPath.row]
             index = bookmark.chapterIndex
             fraction = bookmark.scrollFraction
         } else {
+            guard chapterIndices.indices.contains(indexPath.row) else { return }
             index = chapterIndices[indexPath.row]
             fraction = 0
         }
         let selection = onSelect
         let completion = onDismiss
-        dismissContents { selection?(index, fraction); completion?() }
+        guard book.chapters.indices.contains(index) else { return }
+        let chapterID = book.chapters[index].id
+        let bookID = book.id
+        let library = library
+        dismissContents {
+            // The catalog can change again during the sheet dismissal animation.
+            if let index = library.book(id: bookID)?.chapters.firstIndex(where: { $0.id == chapterID }) {
+                selection?(index, fraction)
+            }
+            completion?()
+        }
     }
 
     func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool { showingBookmarks }
 
     func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        guard showingBookmarks, editingStyle == .delete else { return }
-        LibraryStore.shared.removeBookmark(id: bookmarks[indexPath.row].id)
-        table.deleteRows(at: [indexPath], with: .automatic)
-        updateEmptyState()
+        guard showingBookmarks, editingStyle == .delete,
+              bookmarks.indices.contains(indexPath.row) else { return }
+        guard library.removeBookmark(id: bookmarks[indexPath.row].id) else {
+            showMessage("书签未能移除", library.persistenceError ?? "请稍后重试。")
+            return
+        }
+        // The successful write refreshes the snapshot through libraryChanged.
         onBookmarksChanged?()
+    }
+
+    private func reloadContents() {
+        let query = query
+        if let latest = library.book(id: book.id) {
+            book = latest
+            currentChapter = book.chapters.firstIndex { $0.id == currentChapterID } ?? -1
+            let indices = book.chapters.indices.filter {
+                (query.isEmpty || book.chapters[$0].title.localizedCaseInsensitiveContains(query) || String($0 + 1) == query)
+                    && (!cachedOnly || !book.chapters[$0].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            chapterIndices = reversed ? Array(indices.reversed()) : indices
+            bookmarks = library.bookmarks.filter {
+                $0.bookID == book.id && book.chapters.indices.contains($0.chapterIndex)
+                    && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query))
+            }
+        } else {
+            currentChapter = -1
+            chapterIndices = []
+            bookmarks = []
+        }
+        table.reloadData()
+        updateEmptyState()
     }
 
     private func updateEmptyState() {
@@ -164,8 +203,7 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
     }
 
     func updateSearchResults(for searchController: UISearchController) {
-        table.reloadData()
-        updateEmptyState()
+        reloadContents()
     }
 
     private func updateFilterMenu() {
@@ -176,14 +214,13 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
                     guard let self else { return }
                     self.reversed.toggle()
                     self.updateFilterMenu()
-                    self.table.reloadData()
+                    self.reloadContents()
                 },
                 UIAction(title: "仅看已缓存", state: cachedOnly ? .on : .off) { [weak self] _ in
                     guard let self else { return }
                     self.cachedOnly.toggle()
                     self.updateFilterMenu()
-                    self.table.reloadData()
-                    self.updateEmptyState()
+                    self.reloadContents()
                 },
                 UIAction(title: "定位当前章节") { [weak self] _ in
                     guard let self else { return }
@@ -205,7 +242,7 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
             table.scrollToRow(at: IndexPath(row: row, section: 0), at: .middle, animated: false)
         }
     }
-    @objc private func changeSegment() { table.reloadData(); updateEmptyState() }
+    @objc private func changeSegment() { reloadContents() }
     @objc private func close() {
         let completion = onDismiss
         dismissContents(completion: completion)

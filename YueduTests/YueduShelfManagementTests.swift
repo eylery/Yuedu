@@ -1,8 +1,28 @@
 import XCTest
+import UIKit
 @testable import Yuedu
 
 @MainActor
 final class YueduShelfManagementTests: XCTestCase {
+    func testHiddenShelfDefersProgressRefreshUntilItAppears() throws {
+        let library = LibraryStore.shared
+        let saved = library.add(book("隐藏书架刷新验证-\(UUID().uuidString)"))
+        defer { library.remove(id: saved.id) }
+        let shelf = BookshelfViewController()
+        shelf.loadViewIfNeeded()
+        shelf.viewWillAppear(false)
+        let header = try XCTUnwrap(shelf.content.arrangedSubviews.first)
+        shelf.viewWillDisappear(false)
+        library.updateProgress(bookID: saved.id, chapterIndex: 0, scrollFraction: 0.4)
+        library.recordReading(seconds: 1)
+        XCTAssertTrue(shelf.content.arrangedSubviews.first === header,
+                      "Reading updates must not rebuild the entire hidden shelf")
+        shelf.viewWillAppear(false)
+        XCTAssertFalse(shelf.content.arrangedSubviews.first === header,
+                       "Returning to the shelf must display the latest stored state")
+        shelf.viewWillDisappear(false)
+    }
+
     private var directory: URL!
     private var store: LibraryStore!
 

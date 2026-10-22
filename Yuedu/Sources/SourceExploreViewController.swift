@@ -366,6 +366,9 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
                 try Task.checkCancellation()
                 guard let self, self.generation == token else { return }
                 let saved = LibraryStore.shared.add(book)
+                if let error = LibraryStore.shared.persistenceError {
+                    throw SourceError.invalid(error)
+                }
                 self.isBusy = false
                 self.statusLabel.text = "已加入书架 · \(saved.chapters.count) 章"
                 self.updateChrome()
@@ -375,7 +378,7 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
             catch {
                 guard let self, self.generation == token else { return }
                 self.isBusy = false
-                self.statusLabel.text = "目录加载失败 · 点击书目重试"
+                self.statusLabel.text = "加入书架失败 · 点击书目重试"
                 self.updateChrome()
                 self.showMessage("无法加入书架", error.localizedDescription)
             }

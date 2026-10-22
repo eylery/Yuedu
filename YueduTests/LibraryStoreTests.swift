@@ -53,6 +53,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertNotNil(store.persistenceError)
         store.add(makeBook())
         XCTAssertEqual(try Data(contentsOf: file), original)
+        XCTAssertTrue(store.books.isEmpty, "An unreadable library must not appear to accept unsaved books")
     }
     func testInitialSeedingDoesNotNotifyBeforeStoreIsInitialized() {
         let notification = expectation(description: "No reentrant notification during initialization")
@@ -62,5 +63,57 @@ final class LibraryStoreTests: XCTestCase {
         let store = LibraryStore(directory: directory, seed: true)
         XCTAssertEqual(store.books.count, 6)
         wait(for: [notification], timeout: 0.05)
+    }
+
+    func testFailedWritesKeepLiveStateAndCanRecoverWithoutRestart() throws {
+        let store = LibraryStore(directory: directory)
+        let book = store.add(makeBook())
+        store.addBookmark(bookID: book.id, chapterIndex: 0, scrollFraction: 0.2, title: "一")
+        let bookmarkID = try XCTUnwrap(store.bookmarks.first?.id)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let original = try encoder.encode(store.snapshot)
+        let file = directory.appendingPathComponent("library.json")
+        let disk = try Data(contentsOf: file)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+
+        XCTAssertFalse(store.updateProgress(bookID: book.id, chapterIndex: 1, scrollFraction: 0.8))
+        XCTAssertFalse(store.addBookmark(bookID: book.id, chapterIndex: 1, scrollFraction: 0.5, title: "二"))
+        XCTAssertFalse(store.removeBookmark(id: bookmarkID))
+        XCTAssertFalse(store.recordReading(seconds: 60))
+        XCTAssertFalse(store.remove(id: book.id))
+        var another = makeBook()
+        another.title = "写入失败的书"
+        store.add(another)
+        XCTAssertNotNil(store.persistenceError)
+        XCTAssertEqual(try encoder.encode(store.snapshot), original)
+
+        try FileManager.default.removeItem(at: file)
+        try disk.write(to: file)
+        XCTAssertTrue(store.updateProgress(bookID: book.id, chapterIndex: 1, scrollFraction: 0.8))
+        XCTAssertNil(store.persistenceError)
+        let restored = LibraryStore(directory: directory)
+        XCTAssertEqual(restored.book(id: book.id)?.progress.scrollFraction, 0.8)
+        XCTAssertEqual(restored.books.count, 1)
+        XCTAssertEqual(restored.bookmarks.map(\.id), [bookmarkID])
+        XCTAssertEqual(restored.readingSeconds, 0)
+    }
+
+    func testInvalidNumbersAndOrphanBookmarksDoNotPoisonStorage() throws {
+        let store = LibraryStore(directory: directory)
+        let book = store.add(makeBook())
+        XCTAssertFalse(store.recordReading(seconds: .infinity))
+        XCTAssertFalse(store.recordReading(seconds: .nan))
+        XCTAssertFalse(store.updateProgress(bookID: book.id, chapterIndex: 0, scrollFraction: .nan))
+        XCTAssertFalse(store.addBookmark(bookID: book.id, chapterIndex: 0, scrollFraction: .infinity, title: "无效"))
+        XCTAssertFalse(store.addBookmark(bookID: UUID(), chapterIndex: 0, scrollFraction: 0.5, title: "无效"))
+        XCTAssertFalse(store.addBookmark(bookID: book.id, chapterIndex: 99, scrollFraction: 0.5, title: "无效"))
+        XCTAssertNil(store.persistenceError)
+        XCTAssertTrue(store.recordReading(seconds: 30))
+        XCTAssertTrue(store.addBookmark(bookID: book.id, chapterIndex: 1, scrollFraction: 2, title: "二"))
+        let restored = LibraryStore(directory: directory)
+        XCTAssertEqual(restored.readingSeconds, 30)
+        XCTAssertEqual(restored.bookmarks.first?.scrollFraction, 1)
     }
 }

@@ -76,10 +76,17 @@ final class AllBookmarksViewController: UITableViewController {
     }
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         let bookmark = bookmarks[indexPath.row]
-        LibraryStore.shared.updateProgress(bookID: bookmark.bookID, chapterIndex: bookmark.chapterIndex, scrollFraction: bookmark.scrollFraction)
+        guard LibraryStore.shared.updateProgress(bookID: bookmark.bookID, chapterIndex: bookmark.chapterIndex, scrollFraction: bookmark.scrollFraction) else {
+            showMessage("无法打开书签", LibraryStore.shared.persistenceError ?? "对应书籍或章节已不存在。")
+            return
+        }
         navigationController?.pushViewController(ReaderViewController(bookID: bookmark.bookID), animated: true)
     }
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if editingStyle == .delete { LibraryStore.shared.removeBookmark(id: bookmarks[indexPath.row].id); reload() }
+        guard editingStyle == .delete else { return }
+        if !LibraryStore.shared.removeBookmark(id: bookmarks[indexPath.row].id) {
+            showMessage("书签未能移除", LibraryStore.shared.persistenceError ?? "请稍后重试。")
+        }
+        reload()
     }
 }

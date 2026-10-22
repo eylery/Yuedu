@@ -887,10 +887,16 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     @objc private func toggleBookmark() {
         guard contentAvailable, let chapter else { return }
         if let bookmark = nearbyBookmark {
-            LibraryStore.shared.removeBookmark(id: bookmark.id)
+            guard LibraryStore.shared.removeBookmark(id: bookmark.id) else {
+                showMessage("书签未能移除", LibraryStore.shared.persistenceError ?? "请稍后重试。")
+                return
+            }
             showToast("已移除此处书签")
         } else {
-            LibraryStore.shared.addBookmark(bookID: bookID, chapterIndex: chapterIndex, scrollFraction: currentFraction, title: chapter.title)
+            guard LibraryStore.shared.addBookmark(bookID: bookID, chapterIndex: chapterIndex, scrollFraction: currentFraction, title: chapter.title) else {
+                showMessage("书签未能保存", LibraryStore.shared.persistenceError ?? "章节已变化，请稍后重试。")
+                return
+            }
             showToast("书签已夹在此页")
         }
         updateProgressDisplay()

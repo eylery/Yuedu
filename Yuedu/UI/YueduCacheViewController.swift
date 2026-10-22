@@ -13,6 +13,7 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
     private var filter: Filter = .all
     private var sizeFirst = true
     private var books: [Book] = []
+    private var cacheSummaries: [UUID: YueduCacheSummary] = [:]
     private var chapters: [Int] = []
     private var selectedIDs = Set<UUID>()
     private var observers: [NSObjectProtocol] = []
@@ -71,6 +72,10 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
 
     private func render() {
         guard isViewLoaded else { return }
+        let targets = book.map { [$0] } ?? library.books.filter(\.supportsCacheManagement)
+        cacheSummaries = targets.reduce(into: [:]) { result, book in
+            result[book.id] = book.cacheSummary
+        }
         if bookID != nil && book == nil {
             chapters = []
             selectedIDs.removeAll()
@@ -98,13 +103,15 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
                       query.isEmpty || book.title.localizedCaseInsensitiveContains(query) || book.sourceName.localizedCaseInsensitiveContains(query) else { return false }
                 switch filter {
                 case .all: return true
-                case .cached: return book.cacheSummary.chapters > 0
-                case .missing: return book.cacheSummary.chapters < book.chapters.count
+                case .cached: return summary(for: book).chapters > 0
+                case .missing: return summary(for: book).chapters < book.chapters.count
                 case .tasks: return manager.taskBookIDs.contains(book.id)
                 case .failed: return !manager.failedChapterIDs(bookID: book.id).isEmpty
                 }
             }.sorted {
-                if sizeFirst, $0.cacheSummary.bytes != $1.cacheSummary.bytes { return $0.cacheSummary.bytes > $1.cacheSummary.bytes }
+                if sizeFirst, summary(for: $0).bytes != summary(for: $1).bytes {
+                    return summary(for: $0).bytes > summary(for: $1).bytes
+                }
                 return $0.title.localizedStandardCompare($1.title) == .orderedAscending
             }
             selectedIDs.formIntersection(books.map(\.id))
@@ -117,6 +124,9 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
     }
 
     private var dataCount: Int { bookID == nil ? books.count : chapters.count }
+    private func summary(for book: Book) -> YueduCacheSummary {
+        cacheSummaries[book.id] ?? YueduCacheSummary()
+    }
     private func id(at row: Int) -> UUID { book.map { $0.chapters[chapters[row]].id } ?? books[row].id }
 
     private func updateButtons() {
@@ -220,8 +230,9 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
         if indexPath.section == 0 {
             let targets = book.map { [$0] } ?? library.books.filter(\.supportsCacheManagement)
             let summary = targets.reduce(into: YueduCacheSummary()) { value, book in
-                value.chapters += book.cacheSummary.chapters
-                value.bytes += book.cacheSummary.bytes
+                let cached = self.summary(for: book)
+                value.chapters += cached.chapters
+                value.bytes += cached.bytes
             }
             content.text = "\(summary.size) · 已缓存 \(summary.chapters) 章"
             if let book {
@@ -257,7 +268,8 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
         } else {
             let book = books[indexPath.row]
             content.text = book.title
-            content.secondaryText = "\(book.sourceName) · \(book.cacheSummary.chapters)/\(book.chapters.count) 章 · \(book.cacheSummary.size)"
+            let cached = summary(for: book)
+            content.secondaryText = "\(book.sourceName) · \(cached.chapters)/\(book.chapters.count) 章 · \(cached.size)"
                 + (manager.status(for: book.id).map { "\n\($0.message)" } ?? "")
             cell.accessibilityIdentifier = "cache.book.\(book.id)"
             cell.accessoryType = .disclosureIndicator

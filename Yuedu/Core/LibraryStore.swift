@@ -9,6 +9,7 @@ final class LibraryStore {
     private(set) var readingDates: [String] = []
     private(set) var shelfGroups: [YueduShelfGroup] = []
     private(set) var persistenceError: String?
+    private var hasUnreadableLibrary = false
     private let fileURL: URL
     private var cacheRevisions: [UUID: Int] = [:]
 
@@ -33,10 +34,12 @@ final class LibraryStore {
                 readingDates = snapshot.readingDates
                 shelfGroups = snapshot.shelfGroups ?? []
             } else if seed {
-                books = SampleLibrary.books
-                persist(notify: false)
+                var initial = snapshot
+                initial.books = SampleLibrary.books
+                persist(initial, notify: false)
             }
         } catch {
+            hasUnreadableLibrary = true
             persistenceError = "书架读取失败，原文件已保留：\(error.localizedDescription)"
         }
     }
@@ -49,26 +52,33 @@ final class LibraryStore {
             if let url = book.bookURL { return candidate.bookURL == url && candidate.sourceID == book.sourceID }
             return candidate.title == book.title && candidate.author == book.author && candidate.sourceName == book.sourceName
         }) { return existing }
-        books.insert(book, at: 0)
-        persist()
+        var updated = snapshot
+        updated.books.insert(book, at: 0)
+        persist(updated)
         return book
     }
 
-    func remove(id: UUID) {
-        books.removeAll { $0.id == id }
-        bookmarks.removeAll { $0.bookID == id }
-        persist()
+    @discardableResult
+    func remove(id: UUID) -> Bool {
+        var updated = snapshot
+        updated.books.removeAll { $0.id == id }
+        updated.bookmarks.removeAll { $0.bookID == id }
+        return persist(updated)
     }
 
-    func updateProgress(bookID: UUID, chapterIndex: Int, scrollFraction: Double) {
-        guard let index = books.firstIndex(where: { $0.id == bookID }), !books[index].chapters.isEmpty else { return }
-        books[index].progress = ReadingProgress(chapterIndex: min(max(0, chapterIndex), books[index].chapters.count - 1), scrollFraction: min(1, max(0, scrollFraction)))
-        books[index].lastReadAt = Date()
-        books[index].consumeReadUpdates()
-        if books[index].shelf?.state == .wanted {
-            books[index].shelf?.state = .reading
+    @discardableResult
+    func updateProgress(bookID: UUID, chapterIndex: Int, scrollFraction: Double) -> Bool {
+        guard scrollFraction.isFinite,
+              let index = books.firstIndex(where: { $0.id == bookID }),
+              !books[index].chapters.isEmpty else { return false }
+        var updated = snapshot
+        updated.books[index].progress = ReadingProgress(chapterIndex: min(max(0, chapterIndex), books[index].chapters.count - 1), scrollFraction: min(1, max(0, scrollFraction)))
+        updated.books[index].lastReadAt = Date()
+        updated.books[index].consumeReadUpdates()
+        if updated.books[index].shelf?.state == .wanted {
+            updated.books[index].shelf?.state = .reading
         }
-        persist()
+        return persist(updated)
     }
 
     func cacheRevision(for bookID: UUID) -> Int { cacheRevisions[bookID, default: 0] }
@@ -116,43 +126,62 @@ final class LibraryStore {
     }
 
     /// Publish state only after the atomic disk write succeeds.
-    func commit(_ snapshot: Snapshot, invalidatingCacheFor ids: Set<UUID> = []) throws {
-        guard persistenceError == nil else { throw SourceError.invalid(persistenceError!) }
+    func commit(_ snapshot: Snapshot, invalidatingCacheFor ids: Set<UUID> = [], notify: Bool = true) throws {
+        guard !hasUnreadableLibrary else {
+            throw SourceError.invalid(persistenceError ?? "书架文件无法读取，原文件已保留。")
+        }
         try JSONEncoder().encode(snapshot).write(to: fileURL, options: .atomic)
         books = snapshot.books
         bookmarks = snapshot.bookmarks
         readingSeconds = snapshot.readingSeconds
         readingDates = snapshot.readingDates
         shelfGroups = snapshot.shelfGroups ?? []
+        persistenceError = nil
         for id in ids { cacheRevisions[id, default: 0] += 1 }
-        NotificationCenter.default.post(name: .libraryChanged, object: nil)
+        if notify { NotificationCenter.default.post(name: .libraryChanged, object: nil) }
     }
 
-    func addBookmark(bookID: UUID, chapterIndex: Int, scrollFraction: Double, title: String) {
-        guard !bookmarks.contains(where: { $0.bookID == bookID && $0.chapterIndex == chapterIndex && abs($0.scrollFraction - scrollFraction) < 0.01 }) else { return }
-        bookmarks.insert(Bookmark(bookID: bookID, chapterIndex: chapterIndex, scrollFraction: scrollFraction, title: title), at: 0)
-        persist()
+    @discardableResult
+    func addBookmark(bookID: UUID, chapterIndex: Int, scrollFraction: Double, title: String) -> Bool {
+        guard scrollFraction.isFinite, let book = book(id: bookID),
+              book.chapters.indices.contains(chapterIndex) else { return false }
+        let fraction = min(1, max(0, scrollFraction))
+        guard !bookmarks.contains(where: { $0.bookID == bookID && $0.chapterIndex == chapterIndex && abs($0.scrollFraction - fraction) < 0.01 }) else { return true }
+        var updated = snapshot
+        updated.bookmarks.insert(Bookmark(bookID: bookID, chapterIndex: chapterIndex, scrollFraction: fraction, title: title), at: 0)
+        return persist(updated)
     }
 
-    func removeBookmark(id: UUID) { bookmarks.removeAll { $0.id == id }; persist() }
+    @discardableResult
+    func removeBookmark(id: UUID) -> Bool {
+        var updated = snapshot
+        updated.bookmarks.removeAll { $0.id == id }
+        return persist(updated)
+    }
 
-    func recordReading(seconds: Double) {
-        guard seconds > 0 else { return }
-        readingSeconds += seconds
+    @discardableResult
+    func recordReading(seconds: Double) -> Bool {
+        guard seconds.isFinite, seconds > 0, (readingSeconds + seconds).isFinite else { return false }
+        var updated = snapshot
+        updated.readingSeconds += seconds
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "yyyy-MM-dd"
         let day = formatter.string(from: Date())
-        if !readingDates.contains(day) { readingDates.append(day) }
-        persist()
+        if !updated.readingDates.contains(day) { updated.readingDates.append(day) }
+        return persist(updated)
     }
 
-    private func persist(notify: Bool = true) {
-        // Never overwrite an unreadable library. The user can recover its original data.
-        guard persistenceError == nil else { return }
+    @discardableResult
+    private func persist(_ updated: Snapshot, notify: Bool = true) -> Bool {
+        guard !hasUnreadableLibrary else { return false }
         do {
-            let data = try JSONEncoder().encode(snapshot)
-            try data.write(to: fileURL, options: .atomic)
-        } catch { persistenceError = "书架保存失败：\(error.localizedDescription)" }
-        if notify { NotificationCenter.default.post(name: .libraryChanged, object: nil) }
+            try commit(updated, notify: notify)
+            return true
+        } catch {
+            persistenceError = "书架保存失败：\(error.localizedDescription)"
+            return false
+        }
     }
 }

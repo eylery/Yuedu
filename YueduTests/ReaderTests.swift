@@ -211,3 +211,54 @@ final class YueduReadingPagePositionTests: XCTestCase {
         XCTAssertNil(YueduReadingPagePosition.scrolling(chapterHeight: 100, viewportHeight: 600, offset: .nan))
     }
 }
+
+@MainActor
+final class YueduReaderContentsRefreshTests: XCTestCase {
+    func testOpenContentsFollowsCatalogChangesAndCurrentChapterIdentity() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let library = LibraryStore(directory: directory)
+        let book = library.add(Book(title: "目录更新", author: "测试", summary: "", category: "",
+                                    coverColor: "517A65", coverSymbol: "book",
+                                    chapters: [BookChapter(title: "第一章", content: "正文"),
+                                               BookChapter(title: "第二章", content: "")], sourceName: "本地"))
+        let contents = ReaderContentsViewController(book: book, currentChapter: 0, bookmarksSelected: false, library: library)
+        contents.loadViewIfNeeded()
+        let table = try XCTUnwrap(contents.view.subviews.compactMap { $0 as? UITableView }.first)
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 2)
+        var updated = library.snapshot
+        updated.books[0].chapters.insert(BookChapter(title: "序章", content: ""), at: 0)
+        try library.commit(updated)
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 3)
+        let current = contents.tableView(table, cellForRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertEqual((current.contentConfiguration as? UIListContentConfiguration)?.text, "第一章")
+        XCTAssertEqual(current.accessoryType, .checkmark)
+
+        let search = try XCTUnwrap(contents.navigationItem.searchController)
+        search.searchBar.text = "第二章"
+        contents.updateSearchResults(for: search)
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 1)
+        XCTAssertEqual(contents.tableView(table, cellForRowAt: IndexPath(row: 0, section: 0)).accessibilityIdentifier,
+                       "reader.chapter.2")
+        library.remove(id: book.id)
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 0)
+    }
+
+    func testBookmarkRowsRefreshAfterAdditionAndDeletion() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let library = LibraryStore(directory: directory)
+        let book = library.add(Book(title: "书签更新", author: "测试", summary: "", category: "",
+                                    coverColor: "517A65", coverSymbol: "book",
+                                    chapters: [BookChapter(title: "第一章", content: "正文")], sourceName: "本地"))
+        let contents = ReaderContentsViewController(book: book, currentChapter: 0, bookmarksSelected: true, library: library)
+        contents.loadViewIfNeeded()
+        let table = try XCTUnwrap(contents.view.subviews.compactMap { $0 as? UITableView }.first)
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 0)
+        library.addBookmark(bookID: book.id, chapterIndex: 0, scrollFraction: 0.4, title: "第一章")
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 1)
+        contents.tableView(table, commit: .delete, forRowAt: IndexPath(row: 0, section: 0))
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 0)
+        XCTAssertTrue(library.bookmarks.isEmpty)
+    }
+}

@@ -262,7 +262,11 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
 
     private func setBusy(_ busy: Bool) {
         isBusy = busy
-        searchBar.setShowsCancelButton(busy, animated: true)
+        if searchBar.showsCancelButton != busy {
+            // Results arrive independently from multiple sources. Keep state
+            // updates from overlapping the search bar's keyboard animation.
+            searchBar.setShowsCancelButton(busy, animated: false)
+        }
         table.allowsSelection = !busy || !rows.isEmpty
         sourceButton.isEnabled = !busy
         historyButton.isEnabled = !busy
