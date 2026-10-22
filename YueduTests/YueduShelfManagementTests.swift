@@ -23,6 +23,42 @@ final class YueduShelfManagementTests: XCTestCase {
         shelf.viewWillDisappear(false)
     }
 
+    func testLargeShelfCreatesOnlyVisibleCellsAndReusesBookIdentity() throws {
+        let library = LibraryStore.shared
+        var snapshot = library.snapshot
+        let added = (0..<600).map { index in
+            Book(title: String(format: "大书架 %04d", index), author: "测试", summary: "", category: "",
+                 coverColor: "517A65", coverSymbol: "book", chapters: [], sourceName: "本地")
+        }
+        let ids = Set(added.map(\.id))
+        snapshot.books.append(contentsOf: added)
+        try library.commit(snapshot)
+        defer { try? library.removeBooks(ids) }
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let shelf = BookshelfViewController()
+        window.rootViewController = shelf
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        shelf.loadViewIfNeeded()
+        shelf.view.layoutIfNeeded()
+        let grid = try XCTUnwrap(shelf.view.subviews.compactMap { $0 as? UICollectionView }.first)
+        grid.layoutIfNeeded()
+        XCTAssertGreaterThanOrEqual(grid.numberOfItems(inSection: 0), 600)
+        XCTAssertLessThan(grid.visibleCells.count, 20)
+        let end = IndexPath(item: grid.numberOfItems(inSection: 0) - 1, section: 0)
+        grid.scrollToItem(at: end, at: .bottom, animated: false)
+        grid.layoutIfNeeded()
+        XCTAssertNotNil(grid.cellForItem(at: end))
+        XCTAssertLessThan(grid.visibleCells.count, 20)
+        XCTAssertFalse(grid.visibleCells.compactMap { $0 as? YueduShelfBookCell }.isEmpty)
+        let layout = try XCTUnwrap(grid.collectionViewLayout as? UICollectionViewFlowLayout)
+        let portraitWidth = layout.itemSize.width
+        window.frame.size = CGSize(width: 844, height: 390)
+        shelf.view.frame = window.bounds
+        shelf.view.layoutIfNeeded()
+        XCTAssertNotEqual(layout.itemSize.width, portraitWidth)
+    }
+
     private var directory: URL!
     private var store: LibraryStore!
 

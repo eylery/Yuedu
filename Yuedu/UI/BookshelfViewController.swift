@@ -2,6 +2,11 @@ import UIKit
 import UniformTypeIdentifiers
 
 final class BookshelfViewController: LibraryPageController, UIDocumentPickerDelegate {
+    private let gridLayout = UICollectionViewFlowLayout()
+    private lazy var collection = UICollectionView(frame: .zero, collectionViewLayout: gridLayout)
+    private var dataSource: UICollectionViewDiffableDataSource<Int, UUID>!
+    private var booksByID: [UUID: Book] = [:]
+
     private var stateFilter: YueduReadingState?
     private var groupID: UUID?
     private var ungrouped = false
@@ -19,6 +24,7 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        configureCollection()
         observer = NotificationCenter.default.addObserver(forName: .libraryChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshWhenVisible() }
         }
@@ -27,8 +33,8 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
         }
         let refresh = UIRefreshControl()
         refresh.addTarget(self, action: #selector(checkUpdates), for: .valueChanged)
-        scroll.refreshControl = refresh
-        scroll.alwaysBounceVertical = true
+        collection.refreshControl = refresh
+        collection.alwaysBounceVertical = true
         render()
     }
 
@@ -75,7 +81,7 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
         let add = symbolButton("plus", label: "添加书籍") { [weak self] in self?.showImportMenu() }
         content.addArrangedSubview(pageHeader(title: "书架", subtitle: "留下想读的，接着喜欢的。", actions: [search, add]))
         let following = YueduFollowingManager.shared
-        if !following.isRunning { scroll.refreshControl?.endRefreshing() }
+        if !following.isRunning { collection.refreshControl?.endRefreshing() }
         if store.books.contains(where: \.canFollow) {
             let updates = store.books.filter { $0.unreadUpdateCount > 0 }.count
             let button = UIButton(type: .system)
@@ -149,55 +155,88 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
             content.addArrangedSubview(hstack([label, UIView(), all], spacing: 10))
         }
 
-        if visibleBooks.isEmpty {
-            content.addArrangedSubview(emptyState())
-        } else {
-            let grid = vstack([], spacing: 25)
-            for start in stride(from: 0, to: visibleBooks.count, by: 3) {
-                let row = hstack([], spacing: 19, alignment: .top)
-                row.distribution = .fillEqually
-                for book in visibleBooks[start..<min(start + 3, visibleBooks.count)] {
-                    row.addArrangedSubview(makeCard(book))
-                }
-                while row.arrangedSubviews.count < 3 { row.addArrangedSubview(UIView()) }
-                grid.addArrangedSubview(row)
-            }
-            content.addArrangedSubview(grid)
-        }
+        if visibleBooks.isEmpty { content.addArrangedSubview(emptyState()) }
+        booksByID = Dictionary(uniqueKeysWithValues: visibleBooks.map { ($0.id, $0) })
+        var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
+        snapshot.appendSections([0])
+        snapshot.appendItems(visibleBooks.map(\.id))
+        let existingIDs = Set(dataSource.snapshot().itemIdentifiers)
+        snapshot.reconfigureItems(snapshot.itemIdentifiers.filter { existingIDs.contains($0) })
+        dataSource.apply(snapshot, animatingDifferences: false)
+        updateGridGeometry()
         renderBatchBar()
     }
 
-    private func makeCard(_ book: Book) -> UIView {
-        let card = BookCard(book: book, action: { [weak self] in
-            guard let self else { return }
-            if self.managing {
-                if !self.selectedIDs.insert(book.id).inserted { self.selectedIDs.remove(book.id) }
-                self.render()
-            } else {
-                self.pushReader(book)
+    private func configureCollection() {
+        // The shelf scrolls as one collection, including its fixed-size header.
+        // Keep the shared page helpers, but replace the all-books stack surface.
+        content.removeFromSuperview()
+        scroll.removeFromSuperview()
+        collection.backgroundColor = Theme.bg
+        collection.accessibilityIdentifier = "shelf.grid"
+        collection.showsVerticalScrollIndicator = false
+        collection.register(YueduShelfBookCell.self, forCellWithReuseIdentifier: "book")
+        collection.register(UICollectionReusableView.self,
+                            forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+                            withReuseIdentifier: "header")
+        view.addSubview(collection)
+        collection.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            collection.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            collection.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            collection.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            collection.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+        ])
+        gridLayout.minimumInteritemSpacing = 19
+        gridLayout.minimumLineSpacing = 25
+        gridLayout.sectionInset = UIEdgeInsets(top: 0, left: 25, bottom: 28, right: 25)
+        dataSource = UICollectionViewDiffableDataSource<Int, UUID>(collectionView: collection) { [weak self] collection, indexPath, id in
+            let cell = collection.dequeueReusableCell(withReuseIdentifier: "book", for: indexPath) as! YueduShelfBookCell
+            guard let self, let book = self.booksByID[id] else { return cell }
+            cell.configure(book: book, managing: self.managing, selected: self.selectedIDs.contains(id), action: { [weak self] in
+                guard let self, let current = LibraryStore.shared.book(id: id) else { return }
+                if self.managing {
+                    if !self.selectedIDs.insert(id).inserted { self.selectedIDs.remove(id) }
+                    self.render()
+                } else {
+                    self.pushReader(current)
+                }
+            }, menu: { [weak self] in
+                guard let self, let current = LibraryStore.shared.book(id: id) else { return UIMenu() }
+                return self.bookMenu(current)
+            })
+            return cell
+        }
+        dataSource.supplementaryViewProvider = { [weak self] collection, kind, indexPath in
+            let header = collection.dequeueReusableSupplementaryView(ofKind: kind, withReuseIdentifier: "header", for: indexPath)
+            guard let self else { return header }
+            if self.content.superview !== header {
+                self.content.removeFromSuperview()
+                header.addSubview(self.content)
+                self.content.pinEdges(to: header, insets: UIEdgeInsets(top: 14, left: 25, bottom: 25, right: 25))
             }
-        }, remove: { [weak self] in self?.confirmRemoveBooks([book.id]) })
-        card.customMenu = { [weak self] in self?.bookMenu(book) ?? UIMenu() }
-        let badge: String
-        if managing {
-            let selected = selectedIDs.contains(book.id)
-            badge = selected ? "✓ 已选择" : "○ 选择"
-            card.accessibilityValue = selected ? "已选择" : "未选择"
-            if selected { card.accessibilityTraits.insert(.selected) }
-        } else {
-            let update = book.unreadUpdateCount > 0 ? " · \(book.unreadUpdateCount) 章更新" : ""
-            badge = (book.shelfInfo.pinned ? "置顶 · " : "") + book.readingState.title + update
+            return header
         }
-        let label = textLabel(badge, size: 11, weight: .medium, color: Theme.accent)
-        label.isAccessibilityElement = false
-        if !managing { card.accessibilityValue = badge }
-        var labels: [UIView] = [card, label]
-        if book.canFollow {
-            let latest = textLabel("最新：\(book.latestChapterTitle)", size: 10, color: Theme.secondary)
-            latest.numberOfLines = 2
-            labels.append(latest)
-        }
-        return vstack(labels, spacing: 7)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updateGridGeometry()
+    }
+
+    private func updateGridGeometry() {
+        let width = collection.bounds.width > 0 ? collection.bounds.width : view.bounds.width
+        guard width > 50 else { return }
+        let available = width - 50
+        let columns = min(6, max(2, Int((available + 19) / 117)))
+        let itemWidth = floor((available - CGFloat(columns - 1) * 19) / CGFloat(columns))
+        let itemSize = CGSize(width: itemWidth, height: ceil(itemWidth * 1.43) + 118)
+        let fitting = content.systemLayoutSizeFitting(CGSize(width: available, height: 0),
+                                                       withHorizontalFittingPriority: .required,
+                                                       verticalFittingPriority: .fittingSizeLevel)
+        let headerSize = CGSize(width: width, height: ceil(fitting.height) + 39)
+        if gridLayout.itemSize != itemSize { gridLayout.itemSize = itemSize }
+        if gridLayout.headerReferenceSize != headerSize { gridLayout.headerReferenceSize = headerSize }
     }
 
     private func groupFilterMenu() -> UIMenu {
@@ -271,7 +310,7 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
 
     @objc private func checkUpdates() {
         YueduFollowingManager.shared.start()
-        if !YueduFollowingManager.shared.isRunning { scroll.refreshControl?.endRefreshing() }
+        if !YueduFollowingManager.shared.isRunning { collection.refreshControl?.endRefreshing() }
     }
 
     private func openFollowing() {
@@ -329,7 +368,7 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
     private func renderBatchBar() {
         batchBar?.removeFromSuperview()
         batchBar = nil
-        scroll.contentInset.bottom = managing ? 80 : 0
+        collection.contentInset.bottom = managing ? 80 : 0
         guard managing else { return }
         let ids = selectedIDs
         let pinMenu = UIMenu(children: [

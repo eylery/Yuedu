@@ -20,10 +20,10 @@ extension Book {
 
     var cacheSummary: YueduCacheSummary {
         chapters.reduce(into: YueduCacheSummary()) { result, chapter in
-            if !chapter.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if chapter.hasCachedContent {
                 result.chapters += 1
             }
-            result.bytes += chapter.content.utf8.count
+            result.bytes += chapter.cachedByteCount
         }
     }
 }
@@ -34,7 +34,7 @@ extension LibraryStore {
         guard let book = book(id: bookID), book.supportsCacheManagement else { return [] }
         let protected = Set(bookmarks.filter { $0.bookID == bookID }.map(\.chapterIndex))
         return Set(book.chapters.enumerated().compactMap { index, chapter in
-            guard !chapter.content.isEmpty else { return nil }
+            guard chapter.cachedByteCount > 0 else { return nil }
             switch cleanup {
             case .all: return chapter.id
             case .read:
@@ -54,7 +54,7 @@ extension LibraryStore {
             let ids = cacheChapterIDs(bookID: updated.books[index].id, cleanup: cleanup)
             for chapter in updated.books[index].chapters.indices where ids.contains(updated.books[index].chapters[chapter].id) {
                 removed.chapters += 1
-                removed.bytes += updated.books[index].chapters[chapter].content.utf8.count
+                removed.bytes += updated.books[index].chapters[chapter].cachedByteCount
                 updated.books[index].chapters[chapter].content = ""
             }
         }

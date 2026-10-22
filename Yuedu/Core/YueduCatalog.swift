@@ -39,7 +39,7 @@ enum YueduCatalog {
                   used.insert(newIndex).inserted else { continue }
             mapping[oldIndex] = newIndex
             updated.chapters[newIndex].id = chapter.id
-            updated.chapters[newIndex].content = chapter.content
+            updated.chapters[newIndex].body = chapter.body
         }
         if old.lastReadAt != nil {
             guard let newIndex = mapping[old.progress.chapterIndex] else {
@@ -62,7 +62,7 @@ enum YueduCatalog {
 
 extension Book {
     var cachedChapterCount: Int {
-        chapters.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+        chapters.filter { $0.hasCachedContent }.count
     }
 
     var searchResult: SourceSearchResult? {

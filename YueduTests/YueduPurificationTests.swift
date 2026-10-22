@@ -157,6 +157,11 @@ final class YueduPurificationTests: XCTestCase {
 
     @MainActor
     func testReaderReprocessesCachedOriginalAndKeepsBookmarkAndChapter() async throws {
+        let originalPreferences = ReaderPreferences.load()
+        var preferences = originalPreferences
+        preferences.turnStyle = .scroll
+        preferences.save()
+        defer { originalPreferences.save() }
         let library = LibraryStore.shared
         let store = YueduPurificationStore.shared
         let oldSettings = store.settings

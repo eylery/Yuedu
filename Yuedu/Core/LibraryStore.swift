@@ -10,10 +10,11 @@ final class LibraryStore {
     private(set) var shelfGroups: [YueduShelfGroup] = []
     private(set) var persistenceError: String?
     private var hasUnreadableLibrary = false
-    private let fileURL: URL
+    private let storage: YueduChapterStorage
     private var cacheRevisions: [UUID: Int] = [:]
 
     struct Snapshot: Codable {
+        var storageVersion: Int? = nil
         var books: [Book]
         var bookmarks: [Bookmark]
         var readingSeconds: Double
@@ -23,16 +24,15 @@ final class LibraryStore {
 
     init(directory: URL? = nil, seed: Bool = false) {
         let base = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Yuedu", isDirectory: true)
-        fileURL = base.appendingPathComponent("library.json")
+        storage = YueduChapterStorage(directory: base)
         do {
-            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: fileURL))
+            if let snapshot = try storage.load() {
                 books = snapshot.books
                 bookmarks = snapshot.bookmarks
                 readingSeconds = snapshot.readingSeconds
                 readingDates = snapshot.readingDates
                 shelfGroups = snapshot.shelfGroups ?? []
+                persistenceError = storage.migrationError
             } else if seed {
                 var initial = snapshot
                 initial.books = SampleLibrary.books
@@ -55,7 +55,7 @@ final class LibraryStore {
         var updated = snapshot
         updated.books.insert(book, at: 0)
         persist(updated)
-        return book
+        return self.book(id: book.id) ?? book
     }
 
     @discardableResult
@@ -120,6 +120,10 @@ final class LibraryStore {
         return addedIDs.count
     }
 
+    func exportBackup(sourceURLs: [String: String]) async throws -> Data {
+        try await storage.export(YueduLibraryBackup(library: snapshot, sourceURLs: sourceURLs))
+    }
+
     var snapshot: Snapshot {
         Snapshot(books: books, bookmarks: bookmarks, readingSeconds: readingSeconds,
                  readingDates: readingDates, shelfGroups: shelfGroups)
@@ -130,7 +134,8 @@ final class LibraryStore {
         guard !hasUnreadableLibrary else {
             throw SourceError.invalid(persistenceError ?? "书架文件无法读取，原文件已保留。")
         }
-        try JSONEncoder().encode(snapshot).write(to: fileURL, options: .atomic)
+        let previous = self.snapshot
+        let snapshot = try storage.save(snapshot)
         books = snapshot.books
         bookmarks = snapshot.bookmarks
         readingSeconds = snapshot.readingSeconds
@@ -138,6 +143,7 @@ final class LibraryStore {
         shelfGroups = snapshot.shelfGroups ?? []
         persistenceError = nil
         for id in ids { cacheRevisions[id, default: 0] += 1 }
+        storage.removeRetiredFiles(from: previous, keeping: snapshot)
         if notify { NotificationCenter.default.post(name: .libraryChanged, object: nil) }
     }
 

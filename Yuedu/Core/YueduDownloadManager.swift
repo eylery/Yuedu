@@ -120,7 +120,7 @@ final class YueduDownloadManager {
             status.total = request.chapterIDs.count
             let ids = Set(request.chapterIDs)
             status.completed = library.book(id: bookID)?.chapters.filter {
-                ids.contains($0.id) && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ids.contains($0.id) && $0.hasCachedContent
             }.count ?? 0
             status.failedCount = request.failedIDs?.count ?? 0
             status.failures = request.failures ?? []
@@ -294,7 +294,7 @@ final class YueduDownloadManager {
                 notify()
                 return true
             }
-            if !chapter.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if chapter.hasCachedContent {
                 transfers?.remove(bookID: book.id, chapterID: chapter.id)
                 continue
             }
@@ -310,7 +310,7 @@ final class YueduDownloadManager {
                 guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     throw SourceError.empty("未获取到正文")
                 }
-                let cachedBytes = library.book(id: book.id)?.chapters.reduce(0) { $0 + $1.content.utf8.count } ?? 0
+                let cachedBytes = library.book(id: book.id)?.chapters.reduce(0) { $0 + $1.cachedByteCount } ?? 0
                 guard cachedBytes + text.utf8.count <= 100_000_000 else {
                     suspend(request, message: "已达到单本书 100 MB 上限，可清理后重新缓存。")
                     return false

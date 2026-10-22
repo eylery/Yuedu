@@ -74,14 +74,7 @@ final class YueduBackupViewController: UITableViewController, UIDocumentPickerDe
                     let sourceURLs = Dictionary(uniqueKeysWithValues: SourceStore.shared.sources.map {
                         ($0.id.uuidString, $0.bookSourceUrl)
                     })
-                    let backup = YueduLibraryBackup(library: store.snapshot, sourceURLs: sourceURLs)
-                    data = try await Task.detached(priority: .userInitiated) {
-                        let data = try JSONEncoder().encode(backup)
-                        guard data.count <= YueduLibraryBackup.maximumBytes else {
-                            throw SourceError.invalid("书架备份超过 200 MB 上限，暂无法导出。")
-                        }
-                        return data
-                    }.value
+                    data = try await store.exportBackup(sourceURLs: sourceURLs)
                 }
                 try Task.checkCancellation()
                 guard let self else { return }

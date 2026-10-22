@@ -98,18 +98,30 @@ final class YueduReaderOverlayTests: XCTestCase {
         reader.beginAppearanceTransition(true, animated: false)
         reader.view.layoutIfNeeded()
         let body = try XCTUnwrap(find("reader.text", in: reader.view) as? UILabel)
-        for _ in 0..<100 {
-            if body.text?.contains("阅读位置") == true { break }
+        let pageReader = try XCTUnwrap(reader.children.first as? YueduPageReaderController)
+        for _ in 0..<200 {
+            if style == .slide ? pageReader.isReady : body.text?.contains("阅读位置") == true { break }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
-        XCTAssertTrue(body.text?.contains("阅读位置") == true)
+        if style == .slide {
+            XCTAssertTrue(pageReader.isReady)
+            XCTAssertNil(body.attributedText, "The hidden scroll label must not typeset the entire paged chapter")
+        } else {
+            XCTAssertTrue(body.text?.contains("阅读位置") == true)
+        }
         reader.view.layoutIfNeeded()
         reader.endAppearanceTransition()
         let surface = try XCTUnwrap(find("reader.surface", in: reader.view))
         let overlay = try XCTUnwrap(find("reader.chrome", in: reader.view))
         let toggle = try XCTUnwrap(find("reader.fullScreen", in: overlay) as? UIButton)
         let scroll = try XCTUnwrap(find("reader.content", in: surface) as? UIScrollView)
-        let pageReader = try XCTUnwrap(reader.children.first as? YueduPageReaderController)
+        if style == .slide {
+            for _ in 0..<200 {
+                if pageReader.isReady { break }
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            XCTAssertTrue(pageReader.isReady)
+        }
         if style == .scroll {
             scroll.setContentOffset(CGPoint(x: 0, y: 180), animated: false)
         }
@@ -242,6 +254,30 @@ final class YueduReaderContentsRefreshTests: XCTestCase {
                        "reader.chapter.2")
         library.remove(id: book.id)
         XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 0)
+    }
+
+    func testUnsavedSwitchCandidateKeepsItsOwnCatalog() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let library = LibraryStore(directory: directory)
+        let candidate = Book(title: "待选版本", author: "测试", summary: "", category: "", coverColor: "517A65", coverSymbol: "book",
+                             chapters: [BookChapter(title: "序章", content: ""), BookChapter(title: "初见", content: ""),
+                                        BookChapter(title: "重逢", content: "")], sourceName: "候选书源")
+        let contents = ReaderContentsViewController(book: candidate, currentChapter: 2, bookmarksSelected: false,
+                                                    library: library, followsLibrary: false)
+        contents.loadViewIfNeeded()
+        let table = try XCTUnwrap(contents.view.subviews.compactMap { $0 as? UITableView }.first)
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 3)
+        let current = contents.tableView(table, cellForRowAt: IndexPath(row: 2, section: 0))
+        XCTAssertEqual(current.accessibilityIdentifier, "reader.chapter.2")
+        XCTAssertEqual(current.accessoryType, .checkmark)
+        let search = try XCTUnwrap(contents.navigationItem.searchController)
+        search.searchBar.text = "重逢"
+        contents.updateSearchResults(for: search)
+        XCTAssertEqual(contents.tableView(table, numberOfRowsInSection: 0), 1)
+        XCTAssertEqual(contents.tableView(table, cellForRowAt: IndexPath(row: 0, section: 0)).accessibilityIdentifier,
+                       "reader.chapter.2")
+        XCTAssertTrue(library.books.isEmpty, "Browsing a candidate must not add it to the shelf")
     }
 
     func testBookmarkRowsRefreshAfterAdditionAndDeletion() throws {

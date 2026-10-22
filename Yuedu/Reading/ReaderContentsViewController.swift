@@ -6,6 +6,7 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
     var onDismiss: (() -> Void)?
     private var book: Book
     private let library: LibraryStore
+    private let followsLibrary: Bool
     private let currentChapterID: UUID?
     private var observer: NSObjectProtocol?
     private var currentChapter = -1
@@ -21,9 +22,10 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
     private var chapterIndices: [Int] = []
     private var showingBookmarks: Bool { segments.selectedSegmentIndex == 1 }
 
-    init(book: Book, currentChapter: Int, bookmarksSelected: Bool, library: LibraryStore? = nil) {
+    init(book: Book, currentChapter: Int, bookmarksSelected: Bool, library: LibraryStore? = nil, followsLibrary: Bool = true) {
         self.book = book
         self.library = library ?? .shared
+        self.followsLibrary = followsLibrary
         self.currentChapterID = book.chapters.indices.contains(currentChapter) ? book.chapters[currentChapter].id : nil
         self.bookmarksInitiallySelected = bookmarksSelected
         super.init(nibName: nil, bundle: nil)
@@ -81,8 +83,10 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
         emptyLabel.textAlignment = .center
         emptyLabel.font = .systemFont(ofSize: 15)
         emptyLabel.textColor = Theme.secondary
-        observer = NotificationCenter.default.addObserver(forName: .libraryChanged, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reloadContents() }
+        if followsLibrary {
+            observer = NotificationCenter.default.addObserver(forName: .libraryChanged, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reloadContents() }
+            }
         }
         reloadContents()
     }
@@ -121,7 +125,7 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
             let index = chapterIndices[indexPath.row]
             let chapter = book.chapters[index]
             content.text = chapter.title
-            content.secondaryText = "\(String(format: "%02d", index + 1))   ·   \(chapter.content.isEmpty ? "待载入" : "可离线阅读")"
+            content.secondaryText = "\(String(format: "%02d", index + 1))   ·   \(!chapter.hasCachedContent ? "待载入" : "可离线阅读")"
             if index == currentChapter { content.textProperties.color = Theme.accent }
             cell.accessoryType = index == currentChapter ? .checkmark : .none
             cell.accessibilityIdentifier = "reader.chapter.\(index)"
@@ -149,9 +153,12 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
         let chapterID = book.chapters[index].id
         let bookID = book.id
         let library = library
+        let followsLibrary = followsLibrary
         dismissContents {
             // The catalog can change again during the sheet dismissal animation.
-            if let index = library.book(id: bookID)?.chapters.firstIndex(where: { $0.id == chapterID }) {
+            if !followsLibrary {
+                selection?(index, fraction)
+            } else if let index = library.book(id: bookID)?.chapters.firstIndex(where: { $0.id == chapterID }) {
                 selection?(index, fraction)
             }
             completion?()
@@ -173,23 +180,27 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
 
     private func reloadContents() {
         let query = query
-        if let latest = library.book(id: book.id) {
+        if followsLibrary {
+            guard let latest = library.book(id: book.id) else {
+                currentChapter = -1
+                chapterIndices = []
+                bookmarks = []
+                table.reloadData()
+                updateEmptyState()
+                return
+            }
             book = latest
-            currentChapter = book.chapters.firstIndex { $0.id == currentChapterID } ?? -1
-            let indices = book.chapters.indices.filter {
-                (query.isEmpty || book.chapters[$0].title.localizedCaseInsensitiveContains(query) || String($0 + 1) == query)
-                    && (!cachedOnly || !book.chapters[$0].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            chapterIndices = reversed ? Array(indices.reversed()) : indices
-            bookmarks = library.bookmarks.filter {
-                $0.bookID == book.id && book.chapters.indices.contains($0.chapterIndex)
-                    && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query))
-            }
-        } else {
-            currentChapter = -1
-            chapterIndices = []
-            bookmarks = []
         }
+        currentChapter = book.chapters.firstIndex { $0.id == currentChapterID } ?? -1
+        let indices = book.chapters.indices.filter {
+            (query.isEmpty || book.chapters[$0].title.localizedCaseInsensitiveContains(query) || String($0 + 1) == query)
+                && (!cachedOnly || book.chapters[$0].hasCachedContent)
+        }
+        chapterIndices = reversed ? Array(indices.reversed()) : indices
+        bookmarks = followsLibrary ? library.bookmarks.filter {
+            $0.bookID == book.id && book.chapters.indices.contains($0.chapterIndex)
+                && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query))
+        } : []
         table.reloadData()
         updateEmptyState()
     }

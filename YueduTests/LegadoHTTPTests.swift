@@ -188,6 +188,34 @@ final class LegadoHTTPTests: XCTestCase {
         catch { XCTAssertTrue(error is CancellationError) }
     }
 
+    func testUnknownLengthBodyStillEnforcesStreamingLimit() async throws {
+        let (client, directory, session, url) = try fixture { _ in
+            .init(data: Data(repeating: 65, count: 8_000_001))
+        }
+        defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+        do {
+            _ = try await client.request(["url": url], sourceID: UUID())
+            XCTFail("Unknown Content-Length must not bypass the body limit")
+        } catch { XCTAssertTrue(error.localizedDescription.contains("8 MB")) }
+    }
+
+    func testCancellingLargeResponseReleasesRateSlotAndAllowsNextRequest() async throws {
+        let (client, directory, session, url) = try fixture { request in
+            .init(data: request.url?.path == "/large" ? Data(repeating: 65, count: 7_000_000) : Data("下一次请求".utf8))
+        }
+        defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+        let source = UUID()
+        let task = Task { try await client.request(["url": url + "/large", "concurrentRate": "1"], sourceID: source) }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Cancellation must reach the background response worker")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        let next = try await client.request(["url": url + "/next", "concurrentRate": "1"], sourceID: source)
+        XCTAssertEqual(next["body"] as? String, "下一次请求")
+    }
+
     func testAutomaticSearchCannotPresentInteractiveBrowser() async throws {
         let client = LegadoHTTPClient(cookieDirectory: FileManager.default.temporaryDirectory)
         do { _ = try await client.browser(["url": "https://fixture.invalid", "method": "code"], sourceID: UUID()); XCTFail("Interaction must require foreground operation") }

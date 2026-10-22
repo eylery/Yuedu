@@ -13,6 +13,12 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
     private var text = NSAttributedString(string: "")
     private var paper = ReaderPreferences.Paper.ivory
     private var ranges: [NSRange] = []
+    private var framesetter: CTFramesetter?
+    private var paginationTask: Task<Void, Never>?
+    private var paginationGeneration = UUID()
+    private var pendingSize: CGSize?
+    private var paginationEnabled = true
+    private let loading = UIActivityIndicatorView(style: .medium)
     private var pageIndex = 0
     private var layoutSize = CGSize.zero
     private var initialFraction = 0.0
@@ -27,11 +33,16 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
         YueduTypography.fittedPageInsets(requestedInsets, viewport: view.bounds.size, minimumContent: minimumContentSize)
     }
 
-    var isReady: Bool { !ranges.isEmpty && layoutSize == contentSize }
-    var fraction: Double { ranges.count > 1 ? Double(pageIndex) / Double(ranges.count - 1) : 1 }
+    var isReady: Bool { pendingSize == nil && !ranges.isEmpty && layoutSize == contentSize }
+    var fraction: Double {
+        guard isReady else { return initialFraction }
+        return ranges.count > 1 ? Double(pageIndex) / Double(ranges.count - 1) : 1
+    }
     var currentPageNumber: Int { pageIndex + 1 }
     var totalPageCount: Int { ranges.count }
     var pageDescription: String { "\(pageIndex + 1)/\(max(1, ranges.count)) 页" }
+
+    deinit { paginationTask?.cancel() }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -42,6 +53,15 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
         view.addSubview(controller.view)
         controller.view.pinEdges(to: view)
         controller.didMove(toParent: self)
+        loading.hidesWhenStopped = true
+        loading.accessibilityIdentifier = "reader.paginationLoading"
+        loading.accessibilityLabel = "正在排版"
+        loading.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(loading)
+        NSLayoutConstraint.activate([
+            loading.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            loading.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         view.addGestureRecognizer(tap)
     }
@@ -59,7 +79,11 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
         }
         preservedOffset = preservePosition && self.text.string == text.string && ranges.indices.contains(pageIndex)
             ? ranges[pageIndex].location : nil
-        self.text = text
+        paginationTask?.cancel()
+        paginationGeneration = UUID()
+        pendingSize = nil
+        paginationEnabled = true
+        self.text = NSAttributedString(attributedString: text)
         self.paper = paper
         requestedInsets = insets
         self.minimumContentSize = minimumContentSize
@@ -80,23 +104,66 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        guard !transitioning, contentSize.width >= 40, contentSize.height >= 40,
-              contentSize != layoutSize, text.length > 0 else { return }
+        let size = contentSize
+        guard paginationEnabled, !transitioning, size.width >= 40, size.height >= 40,
+              size != layoutSize, size != pendingSize, text.length > 0 else { return }
         if layoutSize != .zero, ranges.indices.contains(pageIndex) {
             preservedOffset = ranges[pageIndex].location
         }
-        layoutSize = contentSize
-        ranges = YueduPagination.ranges(for: text, size: layoutSize)
-        pageIndex = preservedOffset.map { YueduPagination.page(containing: $0, in: ranges) }
-            ?? YueduPagination.page(for: initialFraction, count: ranges.count)
-        preservedOffset = nil
-        controller.setViewControllers([page(at: pageIndex)], direction: .forward, animated: false)
+        paginationTask?.cancel()
+        let generation = UUID()
+        paginationGeneration = generation
+        pendingSize = size
+        let offset = preservedOffset
+        let fraction = initialFraction
+        let text = text
+        controller.view.isHidden = true
+        controller.view.isUserInteractionEnabled = false
+        loading.color = paper.ink
+        loading.startAnimating()
         onPositionChanged?()
+        paginationTask = Task { [weak self] in
+            do {
+                let layout = try await YueduPagination.layoutInBackground(for: text, size: size)
+                try Task.checkCancellation()
+                guard let self, self.paginationGeneration == generation else { return }
+                self.ranges = layout.ranges
+                // Rendering owns a separate main-thread framesetter, reused by
+                // the visible pages. Never share the worker's Core Text objects.
+                self.framesetter = CTFramesetterCreateWithAttributedString(text)
+                self.layoutSize = size
+                self.pendingSize = nil
+                self.pageIndex = offset.map { YueduPagination.page(containing: $0, in: layout.ranges) }
+                    ?? YueduPagination.page(for: fraction, count: layout.ranges.count)
+                self.preservedOffset = nil
+                self.initialFraction = self.fraction
+                self.controller.setViewControllers([self.page(at: self.pageIndex)], direction: .forward, animated: false)
+                self.controller.view.isHidden = false
+                self.controller.view.isUserInteractionEnabled = true
+                self.loading.stopAnimating()
+                self.paginationTask = nil
+                self.onPositionChanged?()
+            } catch {
+                guard let self, self.paginationGeneration == generation else { return }
+                self.pendingSize = nil
+                self.loading.stopAnimating()
+                self.paginationTask = nil
+            }
+        }
+    }
+
+    func cancelPagination() {
+        paginationEnabled = false
+        paginationTask?.cancel()
+        paginationTask = nil
+        paginationGeneration = UUID()
+        pendingSize = nil
+        loading.stopAnimating()
     }
 
     private func page(at index: Int) -> YueduPaperPage {
         if ranges.indices.contains(index) {
-            let page = YueduPaperPage(index: index, text: text, range: ranges[index], paper: paper, insets: pageInsets)
+            let page = YueduPaperPage(index: index, text: text, range: ranges[index], paper: paper, insets: pageInsets, framesetter: framesetter)
             page.onToggleFullScreen = { [weak self] in self?.onCenterTap?() }
             return page
         }
@@ -110,14 +177,14 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
 
     func pageViewController(_ pageViewController: UIPageViewController,
                             viewControllerBefore viewController: UIViewController) -> UIViewController? {
-        guard let page = viewController as? YueduPaperPage else { return nil }
+        guard isReady, let page = viewController as? YueduPaperPage else { return nil }
         let previous = page.index - 1
         return previous >= 0 || (previous == -1 && canGoBack) ? self.page(at: previous) : nil
     }
 
     func pageViewController(_ pageViewController: UIPageViewController,
                             viewControllerAfter viewController: UIViewController) -> UIViewController? {
-        guard let page = viewController as? YueduPaperPage else { return nil }
+        guard isReady, let page = viewController as? YueduPaperPage else { return nil }
         let next = page.index + 1
         return next < ranges.count || (next == ranges.count && canGoForward) ? self.page(at: next) : nil
     }
@@ -159,7 +226,7 @@ final class YueduPageReaderController: UIViewController, UIPageViewControllerDat
     }
 
     func turn(_ direction: Int) {
-        guard !transitioning, !ranges.isEmpty else { return }
+        guard !transitioning, isReady else { return }
         let index = pageIndex + direction
         guard index >= 0 || canGoBack, index < ranges.count || canGoForward else { return }
         transitioning = true
@@ -177,13 +244,15 @@ private final class YueduPaperPage: UIViewController {
     private let range: NSRange
     private let paper: ReaderPreferences.Paper
     private let insets: UIEdgeInsets
+    private let framesetter: CTFramesetter?
 
-    init(index: Int, text: NSAttributedString, range: NSRange, paper: ReaderPreferences.Paper, insets: UIEdgeInsets) {
+    init(index: Int, text: NSAttributedString, range: NSRange, paper: ReaderPreferences.Paper, insets: UIEdgeInsets, framesetter: CTFramesetter? = nil) {
         self.index = index
         self.text = text
         self.range = range
         self.paper = paper
         self.insets = insets
+        self.framesetter = framesetter
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -193,6 +262,7 @@ private final class YueduPaperPage: UIViewController {
         let canvas = YueduPaperCanvas()
         canvas.text = text
         canvas.range = range
+        canvas.framesetter = framesetter
         canvas.insets = insets
         canvas.backgroundColor = paper.background
         canvas.isOpaque = true
@@ -211,6 +281,7 @@ private final class YueduPaperPage: UIViewController {
 
 private final class YueduPaperCanvas: UIView {
     var text = NSAttributedString(string: "")
+    var framesetter: CTFramesetter?
     var range = NSRange(location: 0, length: 0)
     var insets = UIEdgeInsets.zero
 
@@ -225,7 +296,7 @@ private final class YueduPaperCanvas: UIView {
         context.saveGState()
         context.translateBy(x: area.minX, y: area.maxY)
         context.scaleBy(x: 1, y: -1)
-        let setter = CTFramesetterCreateWithAttributedString(text)
+        let setter = framesetter ?? CTFramesetterCreateWithAttributedString(text)
         let path = CGPath(rect: CGRect(origin: .zero, size: area.size), transform: nil)
         let frame = CTFramesetterCreateFrame(setter, CFRange(location: range.location, length: range.length), path, nil)
         CTFrameDraw(frame, context)

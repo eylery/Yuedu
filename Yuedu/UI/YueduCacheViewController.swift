@@ -90,8 +90,8 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
                 guard query.isEmpty || chapter.title.localizedCaseInsensitiveContains(query) || String(index + 1) == query else { return false }
                 switch filter {
                 case .all: return true
-                case .cached: return !chapter.content.isEmpty
-                case .missing: return chapter.content.isEmpty
+                case .cached: return chapter.hasCachedContent
+                case .missing: return !chapter.hasCachedContent
                 case .failed: return failed.contains(chapter.id)
                 case .tasks: return manager.taskBookIDs.contains(book.id)
                 }
@@ -260,8 +260,8 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
             let chapter = book.chapters[index]
             let failed = manager.failedChapterIDs(bookID: book.id).contains(chapter.id)
             content.text = "\(index + 1). \(chapter.title)"
-            content.secondaryText = chapter.content.isEmpty ? (failed ? "下载失败 · 可重试" : "未缓存")
-                : "已缓存 · \(ByteCountFormatter.string(fromByteCount: Int64(chapter.content.utf8.count), countStyle: .file))"
+            content.secondaryText = !chapter.hasCachedContent ? (failed ? "下载失败 · 可重试" : "未缓存")
+                : "已缓存 · \(ByteCountFormatter.string(fromByteCount: Int64(chapter.cachedByteCount), countStyle: .file))"
             if index == book.progress.chapterIndex { content.secondaryText! += " · 当前章" }
             cell.accessibilityIdentifier = "cache.chapter.\(index)"
             cell.accessoryType = .disclosureIndicator
@@ -360,7 +360,7 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
             self?.navigationController?.pushViewController(ReaderViewController(bookID: book.id), animated: true)
         })
         alert.addAction(UIAlertAction(title: "缓存本章", style: .default) { [weak self] _ in self?.start(chapterIDs: [chapter.id], bookID: book.id) })
-        if !chapter.content.isEmpty {
+        if chapter.cachedByteCount > 0 {
             alert.addAction(UIAlertAction(title: "清理本章缓存", style: .destructive) { [weak self] _ in
                 self?.confirmClear(ids: [book.id], cleanup: .chapters([chapter.id]), title: "清理本章缓存")
             })
@@ -380,7 +380,7 @@ final class YueduCacheViewController: UITableViewController, UISearchResultsUpda
             let chapterIDs = library.cacheChapterIDs(bookID: id, cleanup: cleanup)
             for chapter in library.book(id: id)?.chapters ?? [] where chapterIDs.contains(chapter.id) {
                 summary.chapters += 1
-                summary.bytes += chapter.content.utf8.count
+                summary.bytes += chapter.cachedByteCount
             }
         }
         let alert = UIAlertController(title: title, message: "将清理 \(summary.chapters) 章，约 \(summary.size)，并取消相关书籍的下载任务。\n目录、进度与书签保留。再次阅读需要可用书源和网络；源已失效的正文请先备份。", preferredStyle: .alert)

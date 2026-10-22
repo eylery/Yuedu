@@ -198,7 +198,8 @@ final class YueduSourceSwitchViewController: UITableViewController {
         if suggested == nil, original.chapters.indices.contains(resumeProgress.chapterIndex) {
             suggested = YueduSourceSwitch.suggestedIndex(original.chapters[resumeProgress.chapterIndex], in: candidate.chapters)
         }
-        let picker = ReaderContentsViewController(book: candidate, currentChapter: suggested ?? 0, bookmarksSelected: false)
+        let picker = ReaderContentsViewController(book: candidate, currentChapter: suggested ?? 0,
+                                                  bookmarksSelected: false, followsLibrary: false)
         picker.onSelect = { [weak self] index, _ in
             guard let self else { return }
             self.cancelPreview()

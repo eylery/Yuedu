@@ -161,6 +161,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         isVisible = false
         saveWork?.cancel()
         persistProgress()
+        pageReader.cancelPagination()
         finishReadingSession()
         sessionTimer?.invalidate()
         sessionTimer = nil
@@ -526,6 +527,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         loadTask?.cancel()
         purificationTask?.cancel()
         purificationToken = UUID()
+        pageReader.cancelPagination()
         originalBody = ""
         displayedBody = ""
         saveWork?.cancel()
@@ -542,13 +544,9 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         chapterEndButton.setTitle(index + 1 < book.chapters.count ? "下一章  →" : "已读至全书末尾", for: .normal)
         chapterEndButton.isEnabled = index + 1 < book.chapters.count
         updateProgressDisplay()
-        if !selected.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            displayContent(selected.content)
-            return
-        }
         // A local volume heading can legitimately contain no body. There is no
         // remote chapter to fetch, but it must remain a navigable TOC entry.
-        if book.sourceID == nil, selected.url == nil {
+        if !selected.hasCachedContent, book.sourceID == nil, selected.url == nil {
             pendingFraction = 0
             setStatus("本章没有正文，可切换到其他章节继续阅读。", loading: false, retry: false)
             chapterEndButton.isHidden = !nextButton.isEnabled
@@ -560,6 +558,24 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         let cacheRevision = LibraryStore.shared.cacheRevision(for: bookID)
         loadTask = Task { [weak self] in
             do {
+                if selected.hasCachedContent {
+                    do {
+                        let cached = try await selected.body.readAsync()
+                        try Task.checkCancellation()
+                        guard let self, self.chapter?.id == selected.id else { return }
+                        guard LibraryStore.shared.cacheRevision(for: book.id) == cacheRevision else {
+                            self.setStatus("缓存或目录已变化，请重新加载这一章。", loading: false, retry: true)
+                            return
+                        }
+                        self.displayContent(cached)
+                        return
+                    } catch {
+                        try Task.checkCancellation()
+                        // Online cache can be reconstructed; local text must report
+                        // the missing/corrupt file instead of silently showing blank.
+                        if book.sourceID == nil { throw error }
+                    }
+                }
                 let content = try await SourceEngine.shared.loadChapter(selected, sourceID: book.sourceID, book: book)
                 try Task.checkCancellation()
                 guard let self, self.chapter?.id == selected.id else { return }
@@ -625,7 +641,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         else { sourceLabel.text = "把时间，留给阅读" }
         contentAvailable = true
         applyTypographyLayout()
-        bodyLabel.attributedText = preferences.attributedText(displayedBody)
+        updateBodyText()
         bodyLabel.isHidden = false
         endLabel.isHidden = false
         chapterEndButton.isHidden = false
@@ -752,7 +768,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         self.preferences = preferences
         applyReadingChrome()
         applyTypographyLayout()
-        if contentAvailable { bodyLabel.attributedText = preferences.attributedText(displayedBody) }
+        if contentAvailable { updateBodyText() }
         if contentAvailable { configurePages(preservePosition: preservePage) }
         applyPalette()
         view.setNeedsLayout()
@@ -824,11 +840,21 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         return true
     }
 
+    private func updateBodyText() {
+        // A hidden scroll label would otherwise lay out the entire long chapter
+        // on the main thread even when the paged renderer is doing its own work.
+        bodyLabel.attributedText = preferences.turnStyle == .scroll
+            ? preferences.attributedText(displayedBody) : nil
+    }
+
     private func configurePages(preservePosition: Bool) {
         let paged = preferences.turnStyle == .slide && contentAvailable
         pageReader.view.isHidden = !paged
         scrollView.isHidden = paged
-        guard paged, let chapter, let book else { return }
+        guard paged, let chapter, let book else {
+            pageReader.cancelPagination()
+            return
+        }
         let text = NSMutableAttributedString(attributedString: preferences.attributedText(chapter.title + "\n", size: preferences.titleFontSize, isTitle: true))
         text.append(preferences.attributedText(displayedBody))
         pageReader.configure(

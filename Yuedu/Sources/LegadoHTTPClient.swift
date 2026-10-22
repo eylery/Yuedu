@@ -12,7 +12,7 @@ final class LegadoHTTPClient {
     private var cookies: [String: [StoredCookie]] = [:]
     private var active: [UUID: Int] = [:]
     private var rateWindows: [UUID: (start: TimeInterval, count: Int)] = [:]
-    private static let responseLimit = 8_000_000
+    private nonisolated static let responseLimit = 8_000_000
 
     init(session: URLSession? = nil, cookieDirectory: URL? = nil, backgroundTransfers: YueduBackgroundTransfer? = nil) {
         self.backgroundTransfers = backgroundTransfers ?? (session == nil ? .shared : nil)
@@ -57,10 +57,10 @@ final class LegadoHTTPClient {
         if let cached = prefetched, cached.1.statusCode < 400 {
             if let url = cached.1.url { _ = try Self.validURL(url.absoluteString) }
             if cookieJar { receiveCookies(cached.1, sourceID: sourceID) }
-            let text = try Self.decode(cached.0, preferred: payload["charset"] as? String, response: cached.1.textEncodingName)
-            return ["body": text, "url": cached.1.url?.absoluteString ?? request.url!.absoluteString,
-                    "status": cached.1.statusCode, "headers": Self.responseHeaders(cached.1),
-                    "bytes": cached.0.base64EncodedString()]
+            let processed = try await Self.processInBackground(data: cached.0, response: cached.1,
+                                                               charset: payload["charset"] as? String)
+            try Task.checkCancellation()
+            return processed.dictionary(fallbackURL: request.url!.absoluteString)
         }
         let explicitCookie = (payload["headers"] as? [String: Any])?.first(where: { $0.key.lowercased() == "cookie" })?.value as? String
         let delegate = LegadoRedirectDelegate { [weak self] response, proposed, count in
@@ -84,35 +84,75 @@ final class LegadoHTTPClient {
             self.applyCookies(to: &redirected, sourceID: sourceID)
             return redirected
         }
-        let response: URLResponse
-        var data = Data()
-        do {
-            let (bytes, received) = try await session.bytes(for: request, delegate: delegate)
-            response = received
-            defer { bytes.task.cancel() }
-            if let failure = delegate.failure { throw failure }
-            guard received.expectedContentLength <= Int64(Self.responseLimit) else { throw LegadoHTTPError.tooLarge }
-            var chunk = [UInt8]()
-            chunk.reserveCapacity(32_768)
-            for try await byte in bytes {
-                guard data.count + chunk.count < Self.responseLimit else { throw LegadoHTTPError.tooLarge }
-                chunk.append(byte)
-                if chunk.count == 32_768 {
-                    try Task.checkCancellation()
-                    data.append(contentsOf: chunk)
-                    chunk.removeAll(keepingCapacity: true)
+        let processed = try await Self.receiveInBackground(session: session, request: request, delegate: delegate,
+                                                           charset: payload["charset"] as? String)
+        try Task.checkCancellation()
+        if let failure = delegate.failure { throw failure }
+        if let url = processed.response.url { _ = try Self.validURL(url.absoluteString) }
+        if cookieJar { receiveCookies(processed.response, sourceID: sourceID) }
+        return processed.dictionary(fallbackURL: request.url!.absoluteString)
+    }
+
+    private nonisolated static func receiveInBackground(session: URLSession, request: URLRequest,
+                                                        delegate: LegadoRedirectDelegate, charset: String?) async throws -> YueduHTTPResponse {
+        let task = Task.detached(priority: .userInitiated) {
+            do {
+                try Task.checkCancellation()
+                let (bytes, response) = try await session.bytes(for: request, delegate: delegate)
+                defer { bytes.task.cancel() }
+                if let failure = await delegate.failure { throw failure }
+                guard response.expectedContentLength <= Int64(responseLimit) else { throw LegadoHTTPError.tooLarge }
+                var data = Data()
+                var chunk = [UInt8]()
+                chunk.reserveCapacity(32_768)
+                for try await byte in bytes {
+                    guard data.count + chunk.count < responseLimit else { throw LegadoHTTPError.tooLarge }
+                    chunk.append(byte)
+                    if chunk.count == 32_768 {
+                        try Task.checkCancellation()
+                        data.append(contentsOf: chunk)
+                        chunk.removeAll(keepingCapacity: true)
+                    }
                 }
+                try Task.checkCancellation()
+                data.append(contentsOf: chunk)
+                guard let http = response as? HTTPURLResponse else {
+                    throw LegadoHTTPError.invalid("服务器没有返回 HTTP 响应。")
+                }
+                return try process(data: data, response: http, charset: charset)
+            } catch let error as URLError where error.code == .cancelled {
+                throw CancellationError()
             }
-            try Task.checkCancellation()
-            data.append(contentsOf: chunk)
-        } catch let error as URLError where error.code == .cancelled { throw CancellationError() }
-        guard let http = response as? HTTPURLResponse else { throw LegadoHTTPError.invalid("服务器没有返回 HTTP 响应。") }
-        if let url = http.url { _ = try Self.validURL(url.absoluteString) }
-        if cookieJar { receiveCookies(http, sourceID: sourceID) }
-        let headers = Self.responseHeaders(http)
-        let text = try Self.decode(data, preferred: payload["charset"] as? String, response: http.textEncodingName)
-        return ["body": text, "url": http.url?.absoluteString ?? request.url!.absoluteString,
-                "status": http.statusCode, "headers": headers, "bytes": data.base64EncodedString()]
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private nonisolated static func processInBackground(data: Data, response: HTTPURLResponse,
+                                                        charset: String?) async throws -> YueduHTTPResponse {
+        let task = Task.detached(priority: .userInitiated) {
+            try process(data: data, response: response, charset: charset)
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private nonisolated static func process(data: Data, response: HTTPURLResponse,
+                                            charset: String?) throws -> YueduHTTPResponse {
+        try Task.checkCancellation()
+        guard data.count <= responseLimit else { throw LegadoHTTPError.tooLarge }
+        let text = try decode(data, preferred: charset, response: response.textEncodingName)
+        try Task.checkCancellation()
+        let encoded = data.base64EncodedString()
+        try Task.checkCancellation()
+        return YueduHTTPResponse(response: response, text: text, encoded: encoded,
+                                 headers: responseHeaders(response))
     }
 
     /// Interactive browser, text input, or image captcha. User cancellation throws.
@@ -392,7 +432,7 @@ final class LegadoHTTPClient {
         guard !name.isEmpty, name.unicodeScalars.allSatisfy({ token.contains($0) }), !blocked.contains(name.lowercased()), !value.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else { throw LegadoHTTPError.invalid("请求头包含无效字符或连接管理字段：\(name)") }
     }
 
-    static func encoding(_ name: String) throws -> String.Encoding {
+    nonisolated static func encoding(_ name: String) throws -> String.Encoding {
         switch name.lowercased().replacingOccurrences(of: "_", with: "-") {
         case "", "utf-8", "utf8": return .utf8
         case "gbk", "gb2312", "gb18030", "gb-18030": return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
@@ -406,7 +446,7 @@ final class LegadoHTTPClient {
         }
     }
 
-    private static func decode(_ data: Data, preferred: String?, response: String?) throws -> String {
+    private nonisolated static func decode(_ data: Data, preferred: String?, response: String?) throws -> String {
         guard !data.isEmpty else { return "" }
         for name in [preferred, response, "utf-8", "gb18030"].compactMap({ $0 }).filter({ !$0.isEmpty }) {
             if let encoding = try? encoding(name), let text = String(data: data, encoding: encoding) { return text }
@@ -444,11 +484,23 @@ final class LegadoHTTPClient {
         }.joined(separator: "&")
     }
 
-    private static func responseHeaders(_ response: HTTPURLResponse) -> [String: String] {
+    private nonisolated static func responseHeaders(_ response: HTTPURLResponse) -> [String: String] {
         response.allHeaderFields.reduce(into: [:]) { result, entry in result[String(describing: entry.key)] = String(describing: entry.value) }
     }
     private static func cookieJarEnabled(_ payload: [String: Any]) -> Bool { (payload["cookieJar"] as? Bool) ?? true }
     private static func bool(_ value: Any?) -> Bool { (value as? Bool) ?? ((value as? String)?.lowercased() == "true") }
+}
+
+private struct YueduHTTPResponse {
+    let response: HTTPURLResponse
+    let text: String
+    let encoded: String
+    let headers: [String: String]
+
+    func dictionary(fallbackURL: String) -> [String: Any] {
+        ["body": text, "url": response.url?.absoluteString ?? fallbackURL,
+         "status": response.statusCode, "headers": headers, "bytes": encoded]
+    }
 }
 
 private extension Double { var mapMilliseconds: Double { self / 1000 } }
