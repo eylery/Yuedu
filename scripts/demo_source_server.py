@@ -247,6 +247,32 @@ class Handler(BaseHTTPRequestHandler):
             title = "第一章 初见" if number == "1" else "第二章 重逢"
             result = {"content": title + "\n\n推广：净化测试广告\n\n" +
                       "正文应始终保留，窗边的风轻轻吹过。\n\n" * 40}
+        elif parsed.path.startswith("/grouped/book/"):
+            number = parsed.path.rsplit("/", 1)[1]
+            result = {"tocUrl": f"/grouped/toc/{number}"}
+        elif parsed.path.startswith("/grouped/toc/"):
+            number = parsed.path.rsplit("/", 1)[1]
+            result = {"chapters": [{"title": "第一章", "url": f"/grouped/chapter/{number}"}]}
+        elif parsed.path.startswith("/grouped/chapter/"):
+            number = parsed.path.rsplit("/", 1)[1]
+            result = {"content": "选中的第二条收录正文。" if number == "2" else f"第 {number} 条收录正文。"}
+        elif parsed.path == "/online-speed-sources.json":
+            with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
+                template = json.load(file)
+            if isinstance(template, list):
+                template = template[0]
+            # Use separate hosts so this exercises cross-source scheduling rather
+            # than URLSession's intentional three-connections-per-host limit.
+            result = [dict(template, bookSourceName=f"速度测试·{index}", enabled=True,
+                           bookSourceUrl=f"http://{'localhost' if index <= 3 else '127.0.0.1'}:8080/online-speed-{index}",
+                           searchUrl=f"/online/speed/{index}?q={{{{key}}}}&page={{{{page}}}}")
+                      for index in range(1, 6)]
+        elif parsed.path.startswith("/online/speed/"):
+            index = int(parsed.path.rsplit("/", 1)[1])
+            if index <= 3:
+                time.sleep(18)
+            result = {"books": [{"name": "春日手记", "author": "阅读示例", "url": "/books/1",
+                                  "intro": "快速书源先展示，慢书源不阻塞选书与阅读。"}]}
         elif parsed.path == "/online-sources.json":
             Handler.online_retry_requests = 0
             with open("Yuedu/Resources/example-source.json", encoding="utf-8") as file:
@@ -263,6 +289,24 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path.startswith("/online/search/"):
             kind = parsed.path.rsplit("/", 1)[1]
             page = int(parse_qs(parsed.query).get("page", ["1"])[0])
+            if query == "西游记":
+                authors = ["吴承恩", "（明）吴承恩", ".（明）吴承恩", ".（明）吴承恩撰",
+                           "作者：吴承恩 著", "[明代] 吴承恩", "吴承恩（著）"]
+                if kind == "first":
+                    books = [{"name": "《西游记》" if index == 0 else "西游记", "author": author,
+                              "url": f"/grouped/book/{index + 1}", "intro": ""}
+                             for index, author in enumerate(authors)]
+                else:
+                    books = [{"name": "西游记", "author": "吴承恩" if kind == "second" else "刘敬余编",
+                              "url": "/grouped/book/8", "intro": ""}]
+                result = {"books": books}
+                body = json.dumps(result, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if kind == "retry":
                 Handler.online_retry_requests += 1
                 if Handler.online_retry_requests == 1:
@@ -273,6 +317,8 @@ class Handler(BaseHTTPRequestHandler):
             more = {"name": "夏夜手记", "author": "阅读示例", "url": "/books/3", "intro": "第二页新增结果。"}
             recovered = {"name": "冬日手记", "author": "阅读示例", "url": "/books/1", "intro": "重试失败书源后返回的结果。"}
             if kind == "first":
+                if query == "目录失败":
+                    exact = dict(exact, url="/missing-online-book")
                 books = [exact, exact, author] if page == 1 else ([exact, more] if page == 2 else [])
             elif kind == "second":
                 books = [exact]  # Intentionally ignores page; the app must stop repeated pages.

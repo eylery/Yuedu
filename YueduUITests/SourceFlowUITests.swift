@@ -22,7 +22,7 @@ final class SourceFlowUITests: XCTestCase {
 
         let sourceNavigation = app.navigationBars["书源"]
         XCTAssertTrue(sourceNavigation.waitForExistence(timeout: 5))
-        sourceNavigation.buttons.firstMatch.tap()
+        sourceNavigation.buttons["添加与管理书源"].tap()
         let importAction = app.buttons["从网址导入"]
         XCTAssertTrue(importAction.waitForExistence(timeout: 3))
         importAction.tap()

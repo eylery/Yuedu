@@ -65,9 +65,11 @@ final class YueduSourceSwitchUITests: XCTestCase {
         let search = app.searchFields["搜索书名、作者"]
         search.tap()
         search.typeText("换源\n")
-        let original = result(app, source: "换源测试·原源")
+        try contains(app.staticTexts["search.status"], "3 条收录")
+        let original = result(app, source: "阅读测试")
         try require(original)
         original.tap()
+        app.cells["search.book.source.换源测试·原源"].tap()
         app.buttons["加入书架并阅读"].tap()
         try contains(app.staticTexts["reader.text"], "原版本初见正文")
         return app

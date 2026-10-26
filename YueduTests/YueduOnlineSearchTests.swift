@@ -109,19 +109,19 @@ final class YueduOnlineSearchTests: XCTestCase {
     }
 
     func testCancelLimitsConcurrencyRetainsResultsAndDiscardsLateCallbacks() async throws {
-        let sources = (1...5).map { source("书源\($0)") }
+        let sources = (1...6).map { source("书源\($0)") }
         var pending: [UUID: CheckedContinuation<[SourceSearchResult], Never>] = [:]
         let model = YueduOnlineSearchModel { source, _, _ in
             await withCheckedContinuation { pending[source.id] = $0 }
         }
         model.search("春日", sources: sources)
-        try await eventually { pending.count == 3 }
+        try await eventually { pending.count == 4 }
         pending.removeValue(forKey: sources[0].id)?.resume(returning: [result(sources[0])])
-        try await eventually { model.results.count == 1 && pending[sources[3].id] != nil }
+        try await eventually { model.results.count == 1 && pending[sources[4].id] != nil }
         model.cancel()
         XCTAssertFalse(model.isSearching)
         XCTAssertTrue(model.wasCancelled)
-        XCTAssertNil(pending[sources[4].id])
+        XCTAssertNil(pending[sources[5].id])
         for (id, continuation) in pending {
             continuation.resume(returning: [result(sources.first { $0.id == id }!)])
         }
@@ -226,6 +226,72 @@ final class YueduOnlineSearchTests: XCTestCase {
         XCTAssertEqual(model.rows(match: .all, sort: .relevance, merge: false, requiredTitle: "春日手记").count, 3)
     }
 
+    func testAuthorAnnotationsAndInvisibleFormattingMergeWithoutRewritingResults() async throws {
+        let first = source("超星")
+        let second = source("其他源")
+        let authors = ["吴承恩", "（明）吴承恩", ".（明）吴承恩", ".（明）吴承恩撰",
+                       "作者：吴承恩 著", "[明代] 吴承恩", "吴\u{200B}承恩", "吴承恩（著）"]
+        let incoming = authors.enumerated().map { index, author in
+            result(first, index == 0 ? "《西游记》" : "西游\u{FEFF}记", author: author, path: "/\(index)")
+        }
+        let another = result(second, " 西 游 记 ", author: "吴承恩")
+        let adapted = result(first, "西游记", author: "刘敬余编", path: "/adapted")
+        let unknown = result(first, "西游记", author: "未知作者", path: "/unknown")
+        let unknown2 = result(second, "西游记", author: "佚名", path: "/unknown")
+        let model = YueduOnlineSearchModel { source, _, _ in
+            source.id == first.id ? incoming + [adapted, unknown] : [another, unknown2]
+        }
+        model.search("西游记", sources: [first, second])
+        try await eventually { !model.isSearching }
+        let merged = model.rows(match: .exactTitle, sort: .relevance, merge: true)
+        XCTAssertEqual(merged.count, 4)
+        let original = try XCTUnwrap(merged.first { $0.author == "吴承恩" })
+        XCTAssertEqual(original.versions.count, 9)
+        XCTAssertEqual(original.sourceCount, 2)
+        XCTAssertEqual(original.title.replacingOccurrences(of: " ", with: ""), "西游记")
+        XCTAssertEqual(Set(original.versions.map(\.id)), Set((incoming + [another]).map(\.id)))
+        XCTAssertEqual(model.results.first { $0.id == incoming[3].id }?.author, ".（明）吴承恩撰")
+        XCTAssertEqual(model.rows(match: .all, sort: .relevance, merge: false).count, 12)
+    }
+
+    func testIdentityKeepsDifferentWorksCreditsAliasesAndUnknownAuthorsSeparate() {
+        for author in ["（明）吴承恩", ".（明）吴承恩撰", "作者：吴承恩 著", "吴承恩（著）"] {
+            XCTAssertEqual(YueduSearchIdentity.authorKey(author), "吴承恩")
+        }
+        for author in ["吴承恩编著", "吴承恩译", "吴承恩编撰", "吴承恩、张三", "吴承恩改编", "(笔名)吴承恩"] {
+            XCTAssertNotEqual(YueduSearchIdentity.authorKey(author), "吴承恩", author)
+        }
+        XCTAssertNotEqual(YueduSearchIdentity.titleKey("西游记续篇"), YueduSearchIdentity.titleKey("西游记"))
+        XCTAssertNotEqual(YueduSearchIdentity.titleKey("西游记（少儿版）"), YueduSearchIdentity.titleKey("西游记"))
+        XCTAssertEqual(YueduSearchIdentity.titleKey("《ＡＢＣ》"), "abc")
+        XCTAssertEqual(YueduSearchIdentity.authorKey("王著"), "王著")
+        for author in ["", "（明）佚名", "未知作者", "作者：不详", "匿名"] {
+            XCTAssertNil(YueduSearchIdentity.authorKey(author), author)
+        }
+    }
+
+    func testAuthorFilterUsesTheSameIdentityAsGrouping() async throws {
+        let source = source("作者标注")
+        let book = result(source, "西游记", author: ".（明）吴承恩撰")
+        let model = YueduOnlineSearchModel { _, _, _ in [book] }
+        model.search("作者：吴承恩 著", sources: [source])
+        try await eventually { !model.isSearching }
+        XCTAssertEqual(model.rows(match: .author, sort: .relevance, merge: true).count, 1)
+    }
+
+    func testSourceGroupingKeepsDistinctLinksAndSourceConfigurations() {
+        let first = source("同名书源")
+        let second = source("同名书源")
+        let a = result(first)
+        let b = result(first, path: "/2")
+        let c = SourceSearchResult(sourceID: second.id, sourceName: second.bookSourceName,
+                                   title: a.title, author: a.author, summary: "", bookURL: a.bookURL)
+        let groups = YueduSearchSourceGroup.grouped([a, a, c, b])
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertEqual(groups[0].records.map(\.id), [a.id, b.id])
+        XCTAssertEqual(groups[1].records.map(\.id), [c.id])
+    }
+
     func testFilteredEmptyPageStillAllowsPagination() async throws {
         let source = source("精确匹配")
         let unrelated = result(source, "无关书")
@@ -238,6 +304,70 @@ final class YueduOnlineSearchTests: XCTestCase {
         model.loadMore()
         try await eventually { !model.isSearching }
         XCTAssertEqual(model.rows(match: .exactTitle, sort: .relevance, merge: true).count, 1)
+    }
+
+    func testResetDiscardsPendingSearchAndLateResults() async throws {
+        let source = source("清空搜索")
+        var pending: CheckedContinuation<[SourceSearchResult], Never>?
+        let model = YueduOnlineSearchModel { _, _, _ in
+            await withCheckedContinuation { pending = $0 }
+        }
+        model.search("旧关键词", sources: [source])
+        try await eventually { pending != nil }
+        model.reset()
+        pending?.resume(returning: [result(source)])
+        for _ in 0..<5 { await Task.yield() }
+        XCTAssertEqual(model.query, "")
+        XCTAssertTrue(model.results.isEmpty)
+        XCTAssertTrue(model.states.isEmpty)
+        XCTAssertFalse(model.isSearching)
+        XCTAssertFalse(model.canLoadMore)
+        XCTAssertFalse(model.wasCancelled)
+    }
+
+    func testQuickSearchAndPatientRetryUseDifferentBudgets() async throws {
+        let source = source("慢书源")
+        var budgets: [TimeInterval] = []
+        var pages: [Int] = []
+        let model = YueduOnlineSearchModel(timedLoader: { _, _, page, timeout in
+            budgets.append(timeout)
+            pages.append(page)
+            if timeout < 20 { throw SourceError.network("超时") }
+            return [self.result(source)]
+        })
+        model.search("春日", sources: [source])
+        try await eventually { !model.isSearching }
+        XCTAssertEqual(model.failures.count, 1)
+        model.retryFailures()
+        try await eventually { !model.isSearching }
+        XCTAssertEqual(budgets, [12, 30])
+        XCTAssertEqual(pages, [1, 1])
+        XCTAssertEqual(model.results.count, 1)
+        XCTAssertTrue(model.failures.isEmpty)
+    }
+
+    func testSuccessfulSourceStartsAheadOfPreviouslyFailedSources() async throws {
+        let sources = (1...6).map { source("优先级\($0)") }
+        let healthy = sources[5]
+        var pending: [UUID: CheckedContinuation<[SourceSearchResult], Never>] = [:]
+        var secondQuery = false
+        let model = YueduOnlineSearchModel { source, _, _ in
+            if secondQuery {
+                return await withCheckedContinuation { pending[source.id] = $0 }
+            }
+            if source.id != healthy.id { throw SourceError.network("故障") }
+            return [self.result(source)]
+        }
+        model.search("第一次", sources: sources)
+        try await eventually { !model.isSearching }
+        secondQuery = true
+        model.search("第二次", sources: sources)
+        try await eventually { pending.count == 4 }
+        XCTAssertNotNil(pending[healthy.id], "上次成功的书源应进入首批，无需排在故障源之后")
+        model.cancel()
+        pending.values.forEach { $0.resume(returning: []) }
+        for _ in 0..<5 { await Task.yield() }
+        XCTAssertTrue(model.results.isEmpty)
     }
 
     func testHistoryDeduplicatesLimitsPersistsAndClears() {

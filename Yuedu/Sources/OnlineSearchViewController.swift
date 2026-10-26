@@ -4,6 +4,12 @@ import UIKit
 final class OnlineSearchViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate {
     private let table = UITableView(frame: .zero, style: .plain)
     private let searchBar = UISearchBar()
+    private let searchButton = UIButton(type: .system)
+    private let stopButton = UIButton(type: .system)
+    private let matchControl = UISegmentedControl(items: ["综合", "书名", "作者", "精确"])
+    private let header = UIStackView()
+    private let recentStack = UIStackView()
+    private let emptyAction = UIButton(type: .system)
     private let statusLabel = UILabel()
     private let sourceButton = UIButton(type: .system)
     private let failureButton = UIButton(type: .system)
@@ -16,7 +22,7 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     private var scope: Set<UUID>?
     private var match: YueduSearchMatch = .all
     private var sort: YueduSearchSort = .relevance
-    private var mergeVersions = false
+    private var mergeVersions = true
     private var rows: [YueduSearchRow] = []
     private let emptyTitle = UILabel()
     private let emptyDetail = UILabel()
@@ -49,12 +55,24 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         table.dataSource = self
         table.delegate = self
         table.keyboardDismissMode = .onDrag
-        table.rowHeight = 94
+        table.rowHeight = UITableView.automaticDimension
+        table.estimatedRowHeight = 112
+        table.register(UITableViewCell.self, forCellReuseIdentifier: "YueduSearchResult")
         table.contentInset.bottom = 20
         table.accessibilityIdentifier = "search.results"
         view.addSubview(table)
-        table.pinEdges(to: view)
         buildHeader()
+        table.translatesAutoresizingMaskIntoConstraints = false
+        let keyboardBottom = table.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        keyboardBottom.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            table.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
+            table.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            table.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            table.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor),
+            table.heightAnchor.constraint(greaterThanOrEqualToConstant: 0),
+            keyboardBottom
+        ])
         buildEmptyState()
         buildMorePanel()
         model.onChange = { [weak self] in self?.renderSearch() }
@@ -71,12 +89,13 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         }
         updateMenus()
         updateSourceCount()
-        updateEmptyState()
+        renderSearch()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.setNavigationBarHidden(false, animated: animated)
+        table.reloadData()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -104,92 +123,120 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     }
 
     private func buildHeader() {
-        let header = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 196))
-        sourceButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
-        sourceButton.contentHorizontalAlignment = .leading
-        sourceButton.accessibilityIdentifier = "search.scope"
-        sourceButton.addTarget(self, action: #selector(chooseScope), for: .touchUpInside)
+        header.axis = .vertical
+        header.spacing = 6
+        view.addSubview(header)
+        header.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
+            header.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            header.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20)
+        ])
+
         searchBar.placeholder = "搜索书名、作者"
         searchBar.searchBarStyle = .minimal
         searchBar.tintColor = Theme.accent
         searchBar.searchTextField.backgroundColor = Theme.surface
         searchBar.searchTextField.textColor = Theme.ink
-        searchBar.searchTextField.font = .systemFont(ofSize: 15)
+        searchBar.searchTextField.font = .systemFont(ofSize: 16)
         searchBar.searchTextField.returnKeyType = .search
+        searchBar.searchTextField.autocorrectionType = .no
         searchBar.delegate = self
-        statusLabel.font = .systemFont(ofSize: 12)
-        statusLabel.textColor = Theme.secondary
-        statusLabel.numberOfLines = 2
-        statusLabel.accessibilityIdentifier = "search.status"
-        statusLabel.text = "输入书名或作者，在选定的书源中搜索。"
-        failureButton.setTitle("失败与重试", for: .normal)
-        failureButton.accessibilityIdentifier = "search.failures"
-        failureButton.isHidden = true
-        failureButton.addTarget(self, action: #selector(showFailures), for: .touchUpInside)
-        historyButton.setTitle("搜索历史", for: .normal)
+        searchButton.setTitle("搜索", for: .normal)
+        searchButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        searchButton.accessibilityIdentifier = "search.submit"
+        searchButton.addTarget(self, action: #selector(submitSearch), for: .touchUpInside)
+        searchButton.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        let input = UIStackView(arrangedSubviews: [searchBar, searchButton])
+        input.alignment = .center
+        input.spacing = 4
+        header.addArrangedSubview(input)
+
+        sourceButton.contentHorizontalAlignment = .leading
+        sourceButton.accessibilityIdentifier = "search.scope"
+        sourceButton.addTarget(self, action: #selector(chooseScope), for: .touchUpInside)
+        historyButton.setTitle("历史", for: .normal)
         historyButton.accessibilityIdentifier = "search.history"
         historyButton.showsMenuAsPrimaryAction = true
         filterButton.accessibilityIdentifier = "search.options"
         filterButton.showsMenuAsPrimaryAction = true
-        for button in [sourceButton, filterButton, historyButton, failureButton] {
+        let options = UIStackView(arrangedSubviews: [sourceButton, UIView(), filterButton, historyButton])
+        options.spacing = 16
+        options.heightAnchor.constraint(equalToConstant: 38).isActive = true
+        header.addArrangedSubview(options)
+
+        matchControl.selectedSegmentIndex = 0
+        matchControl.selectedSegmentTintColor = Theme.surface
+        matchControl.accessibilityIdentifier = "search.match"
+        matchControl.addTarget(self, action: #selector(changeMatch), for: .valueChanged)
+        matchControl.heightAnchor.constraint(equalToConstant: 34).isActive = true
+        header.addArrangedSubview(matchControl)
+
+        statusLabel.font = .systemFont(ofSize: 12)
+        statusLabel.textColor = Theme.secondary
+        statusLabel.numberOfLines = 2
+        statusLabel.accessibilityIdentifier = "search.status"
+        failureButton.setTitle("失败重试", for: .normal)
+        failureButton.accessibilityIdentifier = "search.failures"
+        failureButton.isHidden = true
+        failureButton.addTarget(self, action: #selector(showFailures), for: .touchUpInside)
+        stopButton.setTitle("停止", for: .normal)
+        stopButton.accessibilityIdentifier = "search.stop"
+        stopButton.isHidden = true
+        stopButton.addTarget(self, action: #selector(stopSearch), for: .touchUpInside)
+        let status = UIStackView(arrangedSubviews: [statusLabel, failureButton, stopButton])
+        status.spacing = 12
+        status.alignment = .center
+        status.heightAnchor.constraint(greaterThanOrEqualToConstant: 36).isActive = true
+        header.addArrangedSubview(status)
+        for button in [sourceButton, filterButton, historyButton, failureButton, stopButton] {
             button.tintColor = Theme.accent
             button.titleLabel?.font = .systemFont(ofSize: 13)
+            button.setContentHuggingPriority(.required, for: .horizontal)
+            button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
-        let options = UIStackView(arrangedSubviews: [filterButton, historyButton])
-        options.distribution = .equalSpacing
-        for item in [sourceButton, searchBar, options, statusLabel, failureButton] {
-            header.addSubview(item)
-            item.translatesAutoresizingMaskIntoConstraints = false
-        }
-        NSLayoutConstraint.activate([
-            sourceButton.topAnchor.constraint(equalTo: header.topAnchor, constant: 12),
-            sourceButton.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 24),
-            sourceButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -24),
-            sourceButton.heightAnchor.constraint(equalToConstant: 36),
-            searchBar.topAnchor.constraint(equalTo: sourceButton.bottomAnchor, constant: 2),
-            searchBar.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
-            searchBar.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
-            searchBar.heightAnchor.constraint(equalToConstant: 54),
-            options.topAnchor.constraint(equalTo: searchBar.bottomAnchor, constant: 4),
-            options.leadingAnchor.constraint(equalTo: sourceButton.leadingAnchor),
-            options.trailingAnchor.constraint(equalTo: sourceButton.trailingAnchor),
-            options.heightAnchor.constraint(equalToConstant: 40),
-            statusLabel.topAnchor.constraint(equalTo: options.bottomAnchor, constant: 8),
-            statusLabel.leadingAnchor.constraint(equalTo: sourceButton.leadingAnchor),
-            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: failureButton.leadingAnchor, constant: -8),
-            failureButton.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
-            failureButton.trailingAnchor.constraint(equalTo: sourceButton.trailingAnchor)
-        ])
-        failureButton.setContentHuggingPriority(.required, for: .horizontal)
-        table.tableHeaderView = header
+        updateSearchButton()
     }
 
     private func buildEmptyState() {
-        let icon = UIImageView(image: UIImage(systemName: "text.book.closed"))
-        icon.tintColor = Theme.accent.withAlphaComponent(0.75)
-        icon.contentMode = .scaleAspectFit
         emptyTitle.font = .readingSerif(22)
         emptyTitle.textColor = Theme.ink
         emptyTitle.textAlignment = .center
-        emptyDetail.font = .systemFont(ofSize: 13)
+        emptyDetail.font = .systemFont(ofSize: 14)
         emptyDetail.textColor = Theme.secondary
         emptyDetail.numberOfLines = 0
         emptyDetail.textAlignment = .center
-        let stack = UIStackView(arrangedSubviews: [icon, emptyTitle, emptyDetail])
+        emptyAction.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+        emptyAction.accessibilityIdentifier = "search.emptyAction"
+        emptyAction.addTarget(self, action: #selector(handleEmptyAction), for: .touchUpInside)
+        recentStack.axis = .vertical
+        recentStack.spacing = 4
+        let stack = UIStackView(arrangedSubviews: [emptyTitle, emptyDetail, emptyAction, recentStack])
         stack.axis = .vertical
-        stack.alignment = .center
-        stack.spacing = 15
+        stack.spacing = 16
         emptyPanel.addSubview(stack)
         stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            icon.heightAnchor.constraint(equalToConstant: 46),
-            icon.widthAnchor.constraint(equalToConstant: 46),
-            stack.topAnchor.constraint(equalTo: emptyPanel.topAnchor, constant: 45),
-            stack.leadingAnchor.constraint(equalTo: emptyPanel.leadingAnchor, constant: 34),
-            stack.trailingAnchor.constraint(equalTo: emptyPanel.trailingAnchor, constant: -34),
-            emptyDetail.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor)
+            stack.topAnchor.constraint(equalTo: emptyPanel.topAnchor, constant: 28),
+            stack.leadingAnchor.constraint(equalTo: emptyPanel.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(equalTo: emptyPanel.trailingAnchor, constant: -24),
+            stack.bottomAnchor.constraint(equalTo: emptyPanel.bottomAnchor, constant: -24)
         ])
-        emptyPanel.frame.size.height = 245
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if table.tableFooterView === emptyPanel {
+            let size = emptyPanel.systemLayoutSizeFitting(
+                CGSize(width: table.bounds.width, height: 0),
+                withHorizontalFittingPriority: .required,
+                verticalFittingPriority: .fittingSizeLevel
+            )
+            if abs(emptyPanel.frame.height - size.height) > 1 || emptyPanel.frame.width != table.bounds.width {
+                emptyPanel.frame = CGRect(x: 0, y: 0, width: table.bounds.width, height: size.height)
+                table.tableFooterView = emptyPanel
+            }
+        }
     }
 
     private var availableSources: [BookSource] {
@@ -202,7 +249,7 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     }
 
     private func updateSourceCount() {
-        sourceButton.setTitle("搜索范围：" + (scope == nil ? "全部" : "自选") + " · \(selectedSources.count) 个书源 ▾", for: .normal)
+        sourceButton.setTitle((scope == nil ? "全部" : "自选") + " · \(selectedSources.count) 个书源 ▾", for: .normal)
         if !hasSearched { updateEmptyState() }
     }
 
@@ -222,36 +269,108 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     }
 
     private func updateEmptyState() {
-        // Even if a local match filter hides page one, users can still request
-        // later pages. Exhaustion is based on raw source results, not the filter.
         let canContinue = hasSearched && (model.canLoadMore || !model.failures.isEmpty)
-        table.tableFooterView = rows.isEmpty && !canContinue ? emptyPanel : morePanel
+        table.tableFooterView = rows.isEmpty ? emptyPanel : morePanel
         moreButton.isEnabled = !isBusy && canContinue
         let caption = model.canLoadMore ? (model.wasCancelled ? "继续搜索" : "加载更多结果")
             : (!model.failures.isEmpty ? "重试失败书源" : "已展示全部结果")
         moreButton.setTitle(isBusy ? "正在搜索…" : caption, for: .normal)
+        recentStack.isHidden = hasSearched || history.queries.isEmpty || availableSources.isEmpty
+        emptyAction.isHidden = isBusy
         if isBusy {
-            emptyTitle.text = "正在翻找故事…"
-            emptyDetail.text = "结果会陆续显示，可随时停止搜索。"
-        } else if hasSearched {
-            emptyTitle.text = "没有匹配的结果"
-            emptyDetail.text = "试试其他关键词、匹配方式或搜索范围。"
+            emptyTitle.text = "正在搜索…"
+            emptyDetail.text = "结果会陆续显示，找到想读的书即可打开。"
         } else if availableSources.isEmpty {
             emptyTitle.text = "先添加一个书源"
-            emptyDetail.text = "在书源管理中导入并启用文字书源。"
+            emptyDetail.text = "导入并启用书源后，就能搜索书名或作者。"
+            emptyAction.setTitle("添加书源", for: .normal)
+        } else if hasSearched {
+            emptyTitle.text = model.results.isEmpty ? "暂时没有找到这本书" : "当前筛选没有匹配结果"
+            emptyDetail.text = model.results.isEmpty
+                ? "可以换个关键词，或调整上方的书源范围。"
+                : "已找到其他结果，可切回综合查看。"
+            emptyAction.setTitle(!model.results.isEmpty && match != .all ? "查看全部结果"
+                : (canContinue ? caption : "重新搜索"), for: .normal)
         } else {
-            emptyTitle.text = "寻找下一本想读的书"
-            emptyDetail.text = "支持按书源和分组选择范围，\n也可以从搜索历史再次查找。"
+            emptyTitle.text = history.queries.isEmpty ? "寻找下一本想读的书" : "最近搜索"
+            emptyDetail.text = history.queries.isEmpty ? "输入书名或作者，点击搜索即可开始。" : "轻点关键词，再搜一次。"
+            emptyAction.isHidden = true
+        }
+        view.setNeedsLayout()
+    }
+
+    private func updateRecentSearches() {
+        recentStack.arrangedSubviews.forEach {
+            recentStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+        for query in history.queries.prefix(6) {
+            let button = UIButton(type: .system)
+            var configuration = UIButton.Configuration.tinted()
+            configuration.title = query
+            configuration.image = UIImage(systemName: "clock.arrow.circlepath")
+            configuration.imagePadding = 12
+            configuration.baseForegroundColor = Theme.accent
+            configuration.baseBackgroundColor = Theme.pale
+            configuration.cornerStyle = .medium
+            button.configuration = configuration
+            button.contentHorizontalAlignment = .leading
+            button.accessibilityIdentifier = "search.recent.\(query)"
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+            button.addAction(UIAction { [weak self] _ in
+                self?.searchBar.text = query
+                self?.submitSearch()
+            }, for: .touchUpInside)
+            recentStack.addArrangedSubview(button)
         }
     }
 
-    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+    @objc private func handleEmptyAction() {
+        if availableSources.isEmpty {
+            manageSources()
+        } else if !model.results.isEmpty && match != .all {
+            match = .all
+            updateMenus()
+            renderSearch()
+        } else if hasSearched && (model.canLoadMore || !model.failures.isEmpty) {
+            loadMore()
+        } else {
+            submitSearch()
+        }
+    }
+
+    @objc private func changeMatch() {
+        match = YueduSearchMatch.allCases[matchControl.selectedSegmentIndex]
+        updateMenus()
+        renderSearch()
+    }
+
+    @objc private func submitSearch() {
         guard let query = searchBar.text?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty else { return }
         view.endEditing(true)
         search(query)
     }
 
-    func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        submitSearch()
+    }
+
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        updateSearchButton()
+        if searchText.isEmpty {
+            operation?.cancel()
+            generation = UUID()
+            hasSearched = false
+            model.reset()
+            updateMenus()
+        }
+    }
+
+    private func updateSearchButton() {
+        searchButton.isEnabled = !(searchBar.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    @objc private func stopSearch() {
         model.cancel()
         operation?.cancel()
         generation = UUID()
@@ -262,15 +381,13 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
 
     private func setBusy(_ busy: Bool) {
         isBusy = busy
-        if searchBar.showsCancelButton != busy {
-            // Results arrive independently from multiple sources. Keep state
-            // updates from overlapping the search bar's keyboard animation.
-            searchBar.setShowsCancelButton(busy, animated: false)
-        }
-        table.allowsSelection = !busy || !rows.isEmpty
-        sourceButton.isEnabled = !busy
-        historyButton.isEnabled = !busy
-        filterButton.isEnabled = !busy
+        stopButton.isHidden = !busy
+        let canBrowse = !busy || model.isSearching
+        table.allowsSelection = canBrowse
+        matchControl.isEnabled = canBrowse
+        sourceButton.isEnabled = canBrowse
+        filterButton.isEnabled = canBrowse
+        historyButton.isEnabled = canBrowse
         updateEmptyState()
     }
 
@@ -281,6 +398,8 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         }
         operation?.cancel()
         generation = UUID()
+        searchBar.text = query
+        updateSearchButton()
         hasSearched = true
         history.record(query)
         updateMenus()
@@ -292,8 +411,10 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         let requiredTitle = switchingBookID.flatMap { LibraryStore.shared.book(id: $0)?.title }
         rows = model.rows(match: match, sort: sort, merge: mergeVersions && switchingBookID == nil, requiredTitle: requiredTitle)
         setBusy(model.isSearching)
-        let count = "\(rows.count) 条匹配 · 累计 \(model.results.count) 个版本"
-        if model.isSearching {
+        let count = "\(rows.count) 条匹配 · 累计 \(model.results.count) 条收录"
+        if !hasSearched {
+            statusLabel.text = switchingBookID == nil ? "输入书名或作者，找到结果即可阅读" : "查找同名书籍，选择版本对比并试读"
+        } else if model.isSearching {
             statusLabel.text = "已搜索 \(model.completed)/\(model.total) 个书源 · \(rows.count) 条结果"
         } else {
             statusLabel.text = count + (model.wasCancelled ? " · 已停止" : "")
@@ -306,7 +427,9 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     }
 
     private func updateMenus() {
-        filterButton.setTitle("\(match.rawValue) · 排序 ▾", for: .normal)
+        filterButton.setTitle("排序 ▾", for: .normal)
+        filterButton.accessibilityValue = sort.rawValue + (mergeVersions ? "，合并同名同作者" : "，分别显示收录")
+        matchControl.selectedSegmentIndex = YueduSearchMatch.allCases.firstIndex(of: match) ?? 0
         let matches = YueduSearchMatch.allCases.map { value in
             UIAction(title: value.rawValue, state: value == match ? .on : .off) { [weak self] _ in
                 self?.match = value
@@ -343,9 +466,11 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
             historyActions.append(UIAction(title: "清空搜索历史", attributes: .destructive) { [weak self] _ in
                 self?.history.clear()
                 self?.updateMenus()
+                self?.updateEmptyState()
             })
         }
         historyButton.menu = UIMenu(title: "最近 20 次搜索 · 仅保存在本机", children: historyActions)
+        updateRecentSearches()
     }
 
     @objc private func chooseScope() {
@@ -366,27 +491,36 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { rows.count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let result = rows[indexPath.row].book
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        let row = rows[indexPath.row]
+        let result = row.book
+        let cell = tableView.dequeueReusableCell(withIdentifier: "YueduSearchResult", for: indexPath)
         cell.backgroundColor = Theme.bg
-        cell.textLabel?.text = result.title
-        cell.textLabel?.font = .readingSerif(18)
-        cell.textLabel?.textColor = Theme.ink
-        let versions = rows[indexPath.row].versions
-        let source = versions.count > 1 ? "\(versions.count) 个版本 · 点击选择书源" : result.sourceName
+        var content = cell.defaultContentConfiguration()
+        content.text = row.title
+        content.textProperties.font = .readingSerif(20)
+        content.textProperties.color = Theme.ink
+        content.textProperties.numberOfLines = 2
+        let saved = row.versions.contains { result in
+            LibraryStore.shared.books.contains { $0.sourceID == result.sourceID && $0.bookURL == result.bookURL }
+        }
+        let source = row.versions.count > 1
+            ? "\(row.sourceCount) 个书源 · \(row.versions.count) 条收录" : result.sourceName
         let detail: String
         if let switchingBookID, let original = LibraryStore.shared.book(id: switchingBookID) {
             detail = YueduSourceSwitch.authorsAgree(original.author, result.author)
                 ? "作者一致 · 点击对比目录与试读" : "作者不同或不明 · 请核对是否同一作品"
         } else {
-            detail = result.summary.isEmpty ? "点击查看目录并加入书架" : result.summary
+            detail = result.summary.isEmpty ? "查看书籍，选择书源并阅读" : result.summary
         }
-        cell.detailTextLabel?.text = "\(result.author)  ·  \(source)\n\(detail)"
-        cell.detailTextLabel?.numberOfLines = 2
-        cell.detailTextLabel?.font = .systemFont(ofSize: 12)
-        cell.detailTextLabel?.textColor = Theme.secondary
-        cell.imageView?.image = UIImage(systemName: "book.closed.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 31, weight: .light))
-        cell.imageView?.tintColor = Theme.accent
+        content.secondaryText = "\(row.author) · \(source)" + (saved ? " · 已在书架" : "") + "\n\(detail)"
+        content.secondaryTextProperties.numberOfLines = 3
+        content.secondaryTextProperties.font = .systemFont(ofSize: 13)
+        content.secondaryTextProperties.color = Theme.secondary
+        content.image = UIImage(systemName: "book.closed.fill")
+        content.imageProperties.tintColor = Theme.accent
+        content.imageProperties.maximumSize = CGSize(width: 34, height: 44)
+        content.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 18, leading: 20, bottom: 18, trailing: 16)
+        cell.contentConfiguration = content
         cell.accessoryType = .disclosureIndicator
         return cell
     }
@@ -446,72 +580,10 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
             prepareSwitch(result)
             return
         }
-        if row.versions.count > 1 {
-            model.cancel()
-            let picker = YueduSearchVersionsViewController(versions: row.versions)
-            picker.onSelect = { [weak self, weak picker] result in
-                guard let picker else { return }
-                self?.showResult(result, presenter: picker)
-            }
-            navigationController?.pushViewController(picker, animated: true)
-        } else {
-            showResult(result, presenter: self)
-        }
-    }
-
-    private func showResult(_ result: SourceSearchResult, presenter: UIViewController) {
-        guard model.results.contains(where: { $0.id == result.id }) else {
-            presenter.showMessage("结果已过期", "书源配置已变更，请返回并重新搜索。")
-            return
-        }
-        let message = "\(result.author) · \(result.sourceName)" + (result.summary.isEmpty ? "" : "\n\n\(result.summary.prefix(400))")
-        let alert = UIAlertController(title: result.title, message: message, preferredStyle: .actionSheet)
-        alert.addAction(UIAlertAction(title: "加入书架并阅读", style: .default) { [weak self] _ in self?.add(result, read: true) })
-        alert.addAction(UIAlertAction(title: "加入书架", style: .default) { [weak self] _ in self?.add(result, read: false) })
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-        if let popover = alert.popoverPresentationController {
-            popover.sourceView = presenter.view
-            popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
-        }
-        presenter.present(alert, animated: true)
-    }
-
-    private func add(_ result: SourceSearchResult, read: Bool) {
-        navigationController?.popToViewController(self, animated: false)
-        guard model.results.contains(where: { $0.id == result.id }) else {
-            showMessage("结果已过期", "书源配置已变更，请重新搜索。")
-            return
-        }
+        view.endEditing(true)
         model.cancel()
-        operation?.cancel()
-        let token = UUID()
-        generation = token
-        setBusy(true)
-        statusLabel.text = "正在加载《\(result.title)》目录…"
-        operation = Task { [weak self] in
-            do {
-                let book = try await SourceEngine.shared.loadBook(result)
-                try Task.checkCancellation()
-                guard let self, self.generation == token else { return }
-                let saved = LibraryStore.shared.add(book)
-                self.setBusy(false)
-                if let error = LibraryStore.shared.persistenceError {
-                    self.statusLabel.text = "保存失败"
-                    self.navigationController?.topViewController?.showMessage("保存失败", error)
-                    return
-                }
-                self.statusLabel.text = "已加入书架 · \(saved.chapters.count) 章"
-                if read { self.navigationController?.pushViewController(ReaderViewController(bookID: saved.id), animated: true) }
-                else { self.navigationController?.topViewController?.showMessage("已加入书架", "《\(saved.title)》共 \(saved.chapters.count) 章，打开书架即可阅读。") }
-            } catch {
-                guard let self, self.generation == token else { return }
-                self.setBusy(false)
-                self.statusLabel.text = Task.isCancelled ? "已停止" : "加载目录失败，请重试"
-                if !Task.isCancelled {
-                    self.navigationController?.topViewController?.showMessage("无法加入书架", error.localizedDescription)
-                }
-            }
-        }
+        let detail = YueduSearchBookViewController(versions: row.versions)
+        navigationController?.pushViewController(detail, animated: true)
     }
 
     @objc private func manageSources() { navigationController?.pushViewController(SourcesViewController(), animated: true) }
@@ -523,45 +595,5 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         alert.addAction(retry)
         alert.addAction(UIAlertAction(title: "关闭", style: .cancel))
         present(alert, animated: true)
-    }
-}
-
-@MainActor
-private final class YueduSearchVersionsViewController: UITableViewController {
-    let versions: [SourceSearchResult]
-    var onSelect: ((SourceSearchResult) -> Void)?
-
-    init(versions: [SourceSearchResult]) {
-        self.versions = versions
-        super.init(style: .insetGrouped)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        title = "选择书源版本"
-        view.backgroundColor = Theme.bg
-        tableView.rowHeight = 76
-    }
-
-    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        versions.first.map { "\($0.title) · \($0.author)" }
-    }
-
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { versions.count }
-
-    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let result = versions[indexPath.row]
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-        cell.textLabel?.text = result.sourceName
-        cell.detailTextLabel?.text = result.bookURL
-        cell.accessoryType = .disclosureIndicator
-        return cell
-    }
-
-    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: true)
-        onSelect?(versions[indexPath.row])
     }
 }
