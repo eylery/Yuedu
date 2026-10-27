@@ -79,6 +79,7 @@ final class YueduSourceSwitchUITests: XCTestCase {
     func testFailedChapterSwitchPreviewRetryCancelManualSelectionAndOfflineReturn() async throws {
         let app = try await launchFixture()
         app.scrollViews["reader.content"].swipeUp()
+        yueduSetReadingTools(app, visible: true)
         app.buttons["reader.addBookmark"].tap()
         let originalProgress = yueduReadingInfo(app)
         app.buttons["reader.nextChapter"].tap()

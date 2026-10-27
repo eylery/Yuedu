@@ -2,9 +2,6 @@ import UIKit
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
-    var window: UIWindow?
-    private var appearanceObserver: NSObjectProtocol?
-
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         if ProcessInfo.processInfo.arguments.contains("--uitesting-reset") {
             let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Yuedu")
@@ -21,15 +18,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         #endif
         _ = YueduDownloadManager.shared
-        let window = UIWindow(frame: UIScreen.main.bounds)
-        window.tintColor = Theme.accent
-        window.overrideUserInterfaceStyle = ReaderPreferences.load().paper == .night ? .dark : .unspecified
-        appearanceObserver = NotificationCenter.default.addObserver(forName: .yueduAppearanceChanged, object: nil, queue: .main) { [weak window] _ in
-            window?.overrideUserInterfaceStyle = ReaderPreferences.load().paper == .night ? .dark : .unspecified
-        }
-        window.rootViewController = MainTabBarController()
-        window.makeKeyAndVisible()
-        self.window = window
         return true
     }
 
@@ -40,25 +28,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             return
         }
         YueduBackgroundTransfer.shared.handleEvents(completion: completionHandler)
-    }
-
-    func applicationDidBecomeActive(_ application: UIApplication) {
-        if UserDefaults.standard.bool(forKey: "following.autoCheck") {
-            YueduFollowingManager.shared.start(automatic: true)
-        }
-    }
-
-    func applicationDidEnterBackground(_ application: UIApplication) {
-        YueduFollowingManager.shared.cancel()
-        YueduSourceChecker.shared.cancel()
-    }
-
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        guard let tabs = window?.rootViewController as? MainTabBarController else { return false }
-        tabs.selectedIndex = 0
-        (tabs.selectedViewController as? UINavigationController)?.popToRootViewController(animated: false)
-        tabs.bookshelf.importDocument(url)
-        return true
     }
 }
 

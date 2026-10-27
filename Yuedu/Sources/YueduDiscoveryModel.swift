@@ -1,9 +1,17 @@
 import Foundation
 
 extension BookSource {
+    var supportsDiscovery: Bool {
+        isTextSource && rawFields["exploreUrl"]?.isEmpty == false
+    }
+
+    var isDiscoveryEnabled: Bool {
+        get { rawFields["enabledExplore"]?.boolValue != false }
+        set { rawFields["enabledExplore"] = .bool(newValue) }
+    }
+
     var hasDiscovery: Bool {
-        enabled && isTextSource && rawFields["enabledExplore"]?.boolValue != false
-            && rawFields["exploreUrl"]?.isEmpty == false
+        enabled && supportsDiscovery && isDiscoveryEnabled
     }
 
     var discoveryGroups: [String] {

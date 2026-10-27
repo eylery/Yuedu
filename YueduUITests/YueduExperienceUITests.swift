@@ -88,6 +88,7 @@ final class YueduExperienceUITests: XCTestCase {
             try await Task.sleep(nanoseconds: 200_000_000)
         }
         XCTAssertEqual(counts["2"], 1, "章末应在打开第二章前开始预取")
+        yueduSetReadingTools(app, visible: true)
         app.buttons["reader.nextChapter"].tap()
         let second = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "第2章缓存管理正文"), object: app.staticTexts["reader.text"])
         XCTAssertEqual(XCTWaiter.wait(for: [second], timeout: 12), .completed)

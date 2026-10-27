@@ -65,6 +65,7 @@ final class YueduPurificationUITests: XCTestCase {
         let body = app.staticTexts["reader.text"]
         try expect(body, contains: "净化测试广告")
         app.scrollViews["reader.content"].swipeUp()
+        yueduSetReadingTools(app, visible: true)
         app.buttons["reader.addBookmark"].tap()
         let progressBeforeCleaning = yueduReadingInfo(app)
         try openTools(app)

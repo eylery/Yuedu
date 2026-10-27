@@ -40,6 +40,7 @@ final class YueduCacheManagementUITests: XCTestCase {
 
     @MainActor
     private func openCache(_ app: XCUIApplication) throws {
+        yueduSetReadingTools(app, visible: true)
         app.buttons["reader.details"].tap()
         try tap(app.cells["bookDetail.online.5"], in: app.tables["bookDetail.list"])
         try require(app.navigationBars["本书缓存"])
@@ -70,6 +71,7 @@ final class YueduCacheManagementUITests: XCTestCase {
         app.buttons["加入书架并阅读"].tap()
         try expectText(app.staticTexts["reader.text"], "第1章缓存管理正文")
         app.scrollViews["reader.content"].swipeUp()
+        yueduSetReadingTools(app, visible: true)
         app.buttons["reader.addBookmark"].tap()
         try openCache(app)
         let table = app.tables["cache.list"]

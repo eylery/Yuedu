@@ -113,7 +113,8 @@ final class YueduReaderOverlayTests: XCTestCase {
         reader.endAppearanceTransition()
         let surface = try XCTUnwrap(find("reader.surface", in: reader.view))
         let overlay = try XCTUnwrap(find("reader.chrome", in: reader.view))
-        let toggle = try XCTUnwrap(find("reader.fullScreen", in: overlay) as? UIButton)
+        XCTAssertNil(find("reader.fullScreen", in: overlay))
+        let settings = try XCTUnwrap(find("reader.settings", in: overlay) as? UIButton)
         let scroll = try XCTUnwrap(find("reader.content", in: surface) as? UIScrollView)
         if style == .slide {
             for _ in 0..<200 {
@@ -161,13 +162,19 @@ final class YueduReaderOverlayTests: XCTestCase {
         let center = CGPoint(x: reader.view.bounds.midX, y: reader.view.bounds.midY)
         let hit = try XCTUnwrap(reader.view.hitTest(center, with: nil))
         XCTAssertTrue(hit.isDescendant(of: surface), "The uncovered overlay must pass reading gestures through")
-        let buttonCenter = toggle.convert(CGPoint(x: toggle.bounds.midX, y: toggle.bounds.midY), to: reader.view)
+        let buttonCenter = settings.convert(CGPoint(x: settings.bounds.midX, y: settings.bounds.midY), to: reader.view)
         let buttonHit = try XCTUnwrap(reader.view.hitTest(buttonCenter, with: nil))
-        XCTAssertTrue(buttonHit === toggle || buttonHit.isDescendant(of: toggle))
+        XCTAssertTrue(buttonHit === settings || buttonHit.isDescendant(of: settings))
         XCTAssertFalse(scroll.isDescendant(of: overlay))
         if style == .slide { XCTAssertNotNil(page) }
+        reader.scrollViewWillBeginDragging(scroll)
+        XCTAssertEqual(overlay.isHidden, style == .scroll)
+        XCTAssertFalse(ReaderPreferences.load().fullScreen, "Automatic hiding is not a saved full-screen preference")
+        XCTAssertEqual(scroll.contentOffset, offset)
+        XCTAssertEqual(surface.frame, frame)
+        if style == .scroll { XCTAssertTrue(reader.accessibilityPerformEscape()) }
         for iteration in 0..<6 {
-            toggle.sendActions(for: .touchUpInside)
+            _ = reader.perform(NSSelectorFromString("toggleFullScreen"))
             // Emulate system-bar safe-area callbacks without changing the window.
             reader.additionalSafeAreaInsets.top = iteration.isMultiple(of: 2) ? 20 : 0
             reader.view.layoutIfNeeded()

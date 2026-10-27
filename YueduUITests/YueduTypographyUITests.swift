@@ -19,6 +19,7 @@ final class YueduTypographyUITests: XCTestCase {
             forDuration: 0.1, thenDragTo: content.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)),
             withVelocity: .slow, thenHoldForDuration: 0.2
         )
+        yueduSetReadingTools(app, visible: true)
         app.buttons["reader.addBookmark"].tap()
         app.buttons["reader.settings"].tap()
         openTypography(app)
@@ -69,7 +70,7 @@ final class YueduTypographyUITests: XCTestCase {
         XCTAssertTrue(page.waitForExistence(timeout: 8))
         XCTAssertEqual(page.label, savedPage)
         screenshot("Typography paged reader after relaunch")
-        app.buttons["reader.fullScreen"].tap()
+        yueduSetReadingTools(app, visible: false)
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         try await Task.sleep(nanoseconds: 1_000_000_000)

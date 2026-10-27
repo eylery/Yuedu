@@ -143,7 +143,7 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { section == 0 ? max(1, visible.count) : 1 }
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? { section == 0 ? "我的书源" : "使用指南" }
     func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        section == 0 ? "启用的文字书源会参与搜索。点击书源可编辑、登录或浏览分类；向左轻扫可移除。" : "导入 Legado 文字书源；漫画、有声和视频等类型会排除。需要登录或自定义参数的书源，请先打开“登录与设置”。"
+        section == 0 ? "开关控制书源启用；点“···”可设置发现页显示。隐藏发现仍可搜索，点书源名称可编辑。" : "导入 Legado 文字书源；漫画、有声和视频等类型会排除。需要登录或自定义参数的书源，请先打开“登录与设置”。"
     }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
@@ -180,7 +180,21 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
             if let result = YueduSourceChecker.shared.result(for: source) {
                 cell.detailTextLabel?.text = (cell.detailTextLabel?.text ?? "") + "\n\(result.title) · \(result.stage) · \(String(format: "%.1f", result.duration)) 秒"
             }
-            cell.detailTextLabel?.numberOfLines = 0
+            var content = cell.defaultContentConfiguration()
+            content.text = source.bookSourceName
+            content.textProperties.font = .yueduUI(ofSize: 16, weight: .medium)
+            content.textProperties.color = Theme.ink
+            content.textProperties.numberOfLines = traitCollection.preferredContentSizeCategory.isAccessibilityCategory ? 0 : 2
+            content.secondaryTextProperties.font = .yueduUI(ofSize: 12)
+            content.secondaryTextProperties.color = cell.detailTextLabel?.textColor ?? Theme.secondary
+            content.secondaryTextProperties.numberOfLines = 0
+            let detail = (cell.detailTextLabel?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let discoveryStatus = source.supportsDiscovery
+                ? (source.isDiscoveryEnabled ? "发现：显示" : "发现：隐藏") : "无发现分类"
+            content.secondaryText = detail + "\n" + discoveryStatus
+            content.textToSecondaryTextVerticalPadding = 6
+            content.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 12)
+            cell.contentConfiguration = content
             if managing {
                 cell.accessoryType = selected.contains(source.id) ? .checkmark : .none
                 cell.accessibilityValue = selected.contains(source.id) ? "已选择" : "未选择"
@@ -191,15 +205,49 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
             toggle.isEnabled = compatibilityIssues.isEmpty
             toggle.onTintColor = Theme.accent
             toggle.accessibilityLabel = compatibilityIssues.isEmpty ? "启用\(source.bookSourceName)" : "\(source.bookSourceName)，配置需修正，已停用"
-            toggle.accessibilityHint = compatibilityIssues.isEmpty ? "控制是否参与在线搜索" : "点击书源可编辑配置并查看兼容性说明"
+            toggle.accessibilityHint = compatibilityIssues.isEmpty ? "停用后不参与在线搜索和发现" : "点击书源可编辑配置并查看兼容性说明"
             toggle.accessibilityIdentifier = "sources.enabled.\(source.id.uuidString)"
             toggle.addAction(UIAction { [weak self, weak toggle] _ in
                 do { try SourceStore.shared.setEnabled(id: source.id, enabled: toggle?.isOn ?? false) }
                 catch { toggle?.isOn = source.enabled; self?.showMessage("无法更新书源", error.localizedDescription) }
             }, for: .valueChanged)
-            cell.accessoryView = toggle
+            let more = UIButton(type: .system)
+            more.setImage(UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19)), for: .normal)
+            more.tintColor = Theme.secondary
+            more.accessibilityLabel = "\(source.bookSourceName)更多操作"
+            more.accessibilityIdentifier = "sources.more.\(source.id.uuidString)"
+            more.accessibilityHint = "设置发现显示、编辑书源或登录"
+            more.showsMenuAsPrimaryAction = true
+            more.menu = sourceMenu(source)
+            more.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            more.heightAnchor.constraint(equalToConstant: 44).isActive = true
+            let controls = hstack([toggle, more], spacing: 14)
+            controls.frame.size = controls.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            cell.accessoryView = controls
         }
         return cell
+    }
+
+    private func sourceMenu(_ source: BookSource) -> UIMenu {
+        var actions: [UIAction] = []
+        if source.supportsDiscovery {
+            actions.append(UIAction(title: source.isDiscoveryEnabled ? "在发现页隐藏" : "在发现页显示",
+                                    image: UIImage(systemName: source.isDiscoveryEnabled ? "eye.slash" : "eye")) { [weak self] _ in
+                do {
+                    try SourceStore.shared.manage([source.id]) { $0.isDiscoveryEnabled = !source.isDiscoveryEnabled }
+                } catch {
+                    self?.showMessage("无法更新发现显示", error.localizedDescription)
+                }
+            })
+        }
+        actions.append(UIAction(title: "编辑书源", image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+            self?.edit(SourceStore.shared.source(id: source.id) ?? source)
+        })
+        actions.append(UIAction(title: "登录与设置", image: UIImage(systemName: "person.crop.circle")) { [weak self] _ in
+            let current = SourceStore.shared.source(id: source.id) ?? source
+            self?.navigationController?.pushViewController(SourceLoginViewController(source: current), animated: true)
+        })
+        return UIMenu(children: actions)
     }
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
@@ -351,8 +399,8 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
         status.menu = UIMenu(children: [
             UIAction(title: "启用所选") { [weak self] _ in self?.batchEdit(ids) { $0.enabled = true } },
             UIAction(title: "停用所选") { [weak self] _ in self?.batchEdit(ids) { $0.enabled = false } },
-            UIAction(title: "开启发现") { [weak self] _ in self?.batchEdit(ids) { $0.rawFields["enabledExplore"] = .bool(true) } },
-            UIAction(title: "关闭发现") { [weak self] _ in self?.batchEdit(ids) { $0.rawFields["enabledExplore"] = .bool(false) } }
+            UIAction(title: "开启发现") { [weak self] _ in self?.batchEdit(ids) { $0.isDiscoveryEnabled = true } },
+            UIAction(title: "关闭发现") { [weak self] _ in self?.batchEdit(ids) { $0.isDiscoveryEnabled = false } }
         ])
         status.showsMenuAsPrimaryAction = true
         status.accessibilityIdentifier = "sources.batch.status"

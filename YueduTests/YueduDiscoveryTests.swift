@@ -65,6 +65,30 @@ final class YueduDiscoveryTests: XCTestCase {
         try await eventually { calls == 3 && model.states[source.id] == .loaded([SourceCategory(title: "分类", url: ""), category]) }
     }
 
+    func testDiscoveryVisibilityPersistsIndependentlyAndClearsExpandedCategories() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = SourceStore(directory: directory)
+        let bookSource = source("显示控制")
+        try store.save(bookSource)
+        let model = YueduDiscoveryModel { _ in [SourceCategory(title: "热门", url: "/books")] }
+        model.updateSources(store.sources)
+        model.toggle(bookSource.id)
+        try await eventually { model.states[bookSource.id] == .loaded([SourceCategory(title: "热门", url: "/books")]) }
+        try store.manage([bookSource.id]) { $0.isDiscoveryEnabled = false }
+        let restored = SourceStore(directory: directory)
+        XCTAssertTrue(try XCTUnwrap(restored.source(id: bookSource.id)).enabled)
+        XCTAssertFalse(try XCTUnwrap(restored.source(id: bookSource.id)).hasDiscovery)
+        XCTAssertEqual(restored.source(id: bookSource.id)?.ruleSearch, bookSource.ruleSearch)
+        model.updateSources(restored.sources)
+        XCTAssertTrue(model.sources.isEmpty)
+        XCTAssertTrue(model.states.isEmpty)
+        XCTAssertTrue(model.expanded.isEmpty)
+        try restored.manage([bookSource.id]) { $0.isDiscoveryEnabled = true }
+        model.updateSources(restored.sources)
+        XCTAssertEqual(model.sources.map(\.id), [bookSource.id])
+    }
+
     func testFailureCanRetryAndDoesNotHideOtherSources() async throws {
         let bad = source("暂时失败")
         let good = source("正常")

@@ -148,7 +148,7 @@ final class ReadingSettingsViewController: UIViewController {
                 self?.preferences.showsStatusBarInFullScreen = value
                 self?.changed()
             },
-            textLabel("轻点正文中央可显示或隐藏功能栏。功能栏覆盖在正文上方，显隐不改变排版；正文始终按全屏安全区域显示。", size: 12, color: Theme.secondary)
+            textLabel("上下滑动正文会自动收起功能栏，轻点正文中央可重新显示或隐藏。功能栏显隐不改变正文排版和阅读位置。", size: 12, color: Theme.secondary)
         ], spacing: 16))
         let note = UILabel()
         note.text = "文字、间距与纸张偏好会自动保存。\n留一点空白，让阅读慢下来。"

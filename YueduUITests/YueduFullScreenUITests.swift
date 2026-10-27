@@ -17,16 +17,21 @@ final class YueduFullScreenUITests: XCTestCase {
         let normalFrame = content.frame
         let settingsFrame = app.buttons["reader.settings"].frame
         let backFrame = app.buttons["reader.back"].frame
+        XCTAssertFalse(app.buttons["reader.fullScreen"].exists)
         content.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)).press(
             forDuration: 0.1,
             thenDragTo: content.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)),
             withVelocity: .slow,
             thenHoldForDuration: 0.2
         )
+        XCTAssertFalse(app.buttons["reader.settings"].isHittable)
+        XCTAssertFalse(app.buttons["reader.back"].isHittable)
+        XCTAssertEqual(content.frame, normalFrame)
+        centerTap(content)
         app.buttons["reader.addBookmark"].tap()
         let textFrame = app.staticTexts["reader.text"].frame
         screenshot("Overlay scroll tools visible")
-        app.buttons["reader.fullScreen"].tap()
+        centerTap(content)
         XCTAssertFalse(app.buttons["reader.settings"].isHittable)
         XCTAssertEqual(content.frame, normalFrame)
         XCTAssertTrue(info.isHittable)
@@ -57,7 +62,7 @@ final class YueduFullScreenUITests: XCTestCase {
         status.tap()
         app.buttons["完成"].tap()
         screenshot("White reader chrome")
-        app.buttons["reader.fullScreen"].tap()
+        centerTap(content)
         expectStatusBar(app, visible: false)
         XCTAssertEqual(pageInfo.label, savedPageInfo)
         XCTAssertEqual(info.frame, infoFrame)
@@ -160,7 +165,7 @@ final class YueduFullScreenUITests: XCTestCase {
         app.buttons["上下滚动"].tap()
         app.buttons["完成"].tap()
         XCTAssertTrue(app.scrollViews["reader.content"].isHittable)
-        app.buttons["reader.fullScreen"].tap()
+        centerTap(app.scrollViews["reader.content"])
         XCTAssertFalse(app.buttons["reader.settings"].isHittable)
         centerTap(app.scrollViews["reader.content"])
         XCTAssertTrue(app.buttons["reader.settings"].isHittable)
@@ -176,6 +181,30 @@ final class YueduFullScreenUITests: XCTestCase {
         app.buttons["shelf.continue"].tap()
         XCTAssertTrue(app.buttons["reader.settings"].waitForExistence(timeout: 8))
         return app
+    }
+
+    @MainActor
+    func testScrollingEitherDirectionHidesToolsWithoutChangingTheSavedPreference() {
+        let app = launchReader()
+        let content = app.scrollViews["reader.content"]
+        let frame = content.frame
+        content.swipeUp()
+        XCTAssertFalse(app.buttons["reader.settings"].isHittable)
+        XCTAssertFalse(app.buttons["reader.back"].isHittable)
+        XCTAssertEqual(content.frame, frame)
+        centerTap(content)
+        XCTAssertTrue(app.buttons["reader.settings"].isHittable)
+        content.swipeDown()
+        XCTAssertFalse(app.buttons["reader.settings"].isHittable)
+        XCTAssertEqual(content.frame, frame)
+        screenshot("Scroll automatically hides reading tools")
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        app.buttons["shelf.continue"].tap()
+        XCTAssertTrue(app.buttons["reader.settings"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["reader.settings"].isHittable)
+        XCTAssertFalse(app.buttons["reader.fullScreen"].exists)
     }
 
     @MainActor
@@ -235,7 +264,7 @@ final class YueduFullScreenUITests: XCTestCase {
 @MainActor
 func yueduReadingInfo(_ app: XCUIApplication, identifier: String? = nil) -> String {
     let toolsVisible = app.buttons["reader.settings"].isHittable
-    if toolsVisible { app.buttons["reader.fullScreen"].tap() }
+    if toolsVisible { yueduSetReadingTools(app, visible: false) }
     let chapter = app.staticTexts["reader.chapterInfo"]
     XCTAssertTrue(chapter.waitForExistence(timeout: 5))
     let result: String
@@ -248,4 +277,11 @@ func yueduReadingInfo(_ app: XCUIApplication, identifier: String? = nil) -> Stri
         app.otherElements["reader.surface"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
     return result
+}
+
+@MainActor
+func yueduSetReadingTools(_ app: XCUIApplication, visible: Bool) {
+    if app.buttons["reader.settings"].isHittable != visible {
+        app.otherElements["reader.surface"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
 }

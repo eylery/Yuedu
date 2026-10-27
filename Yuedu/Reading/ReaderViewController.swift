@@ -12,6 +12,8 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private var isRestoring = false
     private var isChangingSize = false
     private var readingToolsOpen = false
+    private var automaticallyHiddenChrome = false
+    private var isReadingChromeHidden: Bool { preferences.fullScreen || automaticallyHiddenChrome }
     private var pendingFraction: Double?
     private var previousNavigationBarHidden = false
     private var loadTask: Task<Void, Never>?
@@ -99,9 +101,9 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     override var preferredStatusBarStyle: UIStatusBarStyle { preferences.paper == .night ? .lightContent : .darkContent }
     override var prefersStatusBarHidden: Bool {
-        preferences.fullScreen && !preferences.showsStatusBarInFullScreen && !readingToolsOpen
+        isReadingChromeHidden && !preferences.showsStatusBarInFullScreen && !readingToolsOpen
     }
-    override var prefersHomeIndicatorAutoHidden: Bool { preferences.fullScreen && !readingToolsOpen }
+    override var prefersHomeIndicatorAutoHidden: Bool { isReadingChromeHidden && !readingToolsOpen }
     override var preferredStatusBarUpdateAnimation: UIStatusBarAnimation { .none }
 
     override func viewDidLoad() {
@@ -135,6 +137,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         super.viewWillAppear(animated)
         previousNavigationBarHidden = navigationController?.isNavigationBarHidden ?? false
         navigationController?.setNavigationBarHidden(true, animated: animated)
+        automaticallyHiddenChrome = false
         updateReadingViewport()
         applyPreferences(ReaderPreferences.load())
         updateSystemBars()
@@ -356,7 +359,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         chapterTitle.accessibilityIdentifier = "reader.chapterTitle"
         bodyLabel.numberOfLines = 0
         bodyLabel.accessibilityIdentifier = "reader.text"
-        bodyLabel.accessibilityCustomActions = [UIAccessibilityCustomAction(name: "切换全屏阅读") { [weak self] _ in
+        bodyLabel.accessibilityCustomActions = [UIAccessibilityCustomAction(name: "显示或隐藏阅读功能栏") { [weak self] _ in
             self?.toggleFullScreen()
             return true
         }]
@@ -494,8 +497,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         let bookmarks = makeTool(symbol: "bookmark", title: "书签", id: "bookmarks", action: #selector(openBookmarks))
         configureTool(listenButton, symbol: "headphones", title: "听书", id: "listen", action: #selector(openSpeechControls))
         let settings = makeTool(symbol: "textformat.size", title: "设置", id: "settings", action: #selector(openSettings))
-        let fullScreen = makeTool(symbol: "arrow.up.left.and.arrow.down.right", title: "全屏", id: "fullScreen", action: #selector(toggleFullScreen))
-        toolButtons = [contents, bookmarks, listenButton, fullScreen, settings]
+        toolButtons = [contents, bookmarks, listenButton, settings]
         let tools = UIStackView(arrangedSubviews: toolButtons)
         tools.distribution = .fillEqually
         tools.heightAnchor.constraint(equalToConstant: 48).isActive = true
@@ -726,6 +728,13 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         updateProgressDisplay()
     }
 
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        guard scrollView === self.scrollView, preferences.turnStyle == .scroll,
+              isVisible, contentAvailable, !isRestoring, !readingToolsOpen, !isReadingChromeHidden else { return }
+        automaticallyHiddenChrome = true
+        applyReadingChrome()
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard preferences.turnStyle == .scroll, contentAvailable, !isRestoring, pendingFraction == nil else { return }
         updateProgressDisplay()
@@ -800,8 +809,8 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     }
 
     private func applyReadingChrome() {
-        chromeOverlay.isHidden = preferences.fullScreen
-        readingInfoBar.accessibilityElementsHidden = !preferences.fullScreen
+        chromeOverlay.isHidden = isReadingChromeHidden
+        readingInfoBar.accessibilityElementsHidden = !isReadingChromeHidden
         updateSystemBars()
     }
 
@@ -831,10 +840,12 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     @objc private func toggleFullScreen() {
         guard !readingToolsOpen else { return }
-        preferences.fullScreen.toggle()
+        let hidden = !isReadingChromeHidden
+        automaticallyHiddenChrome = false
+        preferences.fullScreen = hidden
         preferences.save()
         applyReadingChrome()
-        UIAccessibility.post(notification: .layoutChanged, argument: preferences.fullScreen ? nil : toolButtons.first)
+        UIAccessibility.post(notification: .layoutChanged, argument: isReadingChromeHidden ? nil : toolButtons.first)
     }
 
     @objc private func contentTapped(_ recognizer: UITapGestureRecognizer) {
@@ -854,7 +865,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     }
 
     override func accessibilityPerformEscape() -> Bool {
-        guard preferences.fullScreen else { return super.accessibilityPerformEscape() }
+        guard isReadingChromeHidden else { return super.accessibilityPerformEscape() }
         toggleFullScreen()
         return true
     }
