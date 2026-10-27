@@ -121,9 +121,10 @@ final class ReadingSettingsViewController: UIViewController {
             button.backgroundColor = paper.background
             button.setTitle(paper.title, for: .normal)
             button.setTitleColor(paper.ink, for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+            button.titleLabel?.font = .yueduUI(ofSize: 15, weight: .medium)
+            button.titleLabel?.adjustsFontForContentSizeCategory = true
             button.layer.cornerRadius = 13
-            button.heightAnchor.constraint(equalToConstant: 54).isActive = true
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 54).isActive = true
             button.accessibilityLabel = "\(paper.title)主题"
             button.accessibilityIdentifier = "readingSettings.theme.\(paper.rawValue)"
             button.addTarget(self, action: #selector(themeChanged(_:)), for: .touchUpInside)
@@ -135,6 +136,10 @@ final class ReadingSettingsViewController: UIViewController {
         stack.addArrangedSubview(sliderSection(title: "屏幕亮度", symbol: "sun.max", valueLabel: nil,
                                               value: Float(UIScreen.main.brightness), min: 0.05, max: 1, action: #selector(brightnessChanged(_:)), id: "brightness"))
         stack.addArrangedSubview(vstack([
+            switchRow(title: "章末预读下一章", id: "prefetch", isOn: preferences.prefetchNextChapter) { [weak self] value in
+                self?.preferences.prefetchNextChapter = value
+                self?.changed()
+            },
             switchRow(title: "全屏阅读", id: "fullScreen", isOn: preferences.fullScreen) { [weak self] value in
                 self?.preferences.fullScreen = value
                 self?.changed()
@@ -147,7 +152,8 @@ final class ReadingSettingsViewController: UIViewController {
         ], spacing: 16))
         let note = UILabel()
         note.text = "文字、间距与纸张偏好会自动保存。\n留一点空白，让阅读慢下来。"
-        note.font = .systemFont(ofSize: 12)
+        note.font = .yueduUI(ofSize: 12)
+        note.adjustsFontForContentSizeCategory = true
         note.textColor = Theme.secondary
         note.numberOfLines = 0
         stack.addArrangedSubview(note)
@@ -157,7 +163,9 @@ final class ReadingSettingsViewController: UIViewController {
     private func sectionTitle(_ text: String) -> UILabel {
         let label = UILabel()
         label.text = text
-        label.font = .systemFont(ofSize: 14, weight: .semibold)
+        label.numberOfLines = 0
+        label.font = .yueduUI(ofSize: 14, weight: .semibold)
+        label.adjustsFontForContentSizeCategory = true
         label.textColor = Theme.ink
         return label
     }

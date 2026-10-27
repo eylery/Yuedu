@@ -9,6 +9,10 @@ final class SourceEngine {
     private let sourceStore: SourceStore
     private let advancedHTTP: LegadoHTTPClient
     private let runtimeState: LegadoStateStore
+    private lazy var chapterRequests = YueduChapterRequests { [weak self] chapter, book, source in
+        guard let self else { throw CancellationError() }
+        return try await self.loadChapter(chapter, source: source, book: book)
+    }
     init(session: URLSession? = nil, store: SourceStore? = nil, stateStore: LegadoStateStore? = nil) {
         sourceStore = store ?? SourceStore.shared
         advancedHTTP = LegadoHTTPClient(session: session)
@@ -113,8 +117,14 @@ final class SourceEngine {
     }
 
     func loadChapter(_ chapter: BookChapter, sourceID: UUID?, book: Book? = nil) async throws -> String {
-        if !chapter.content.isEmpty { return chapter.content }
+        if chapter.hasCachedContent { return try await chapter.body.readAsync() }
         guard let sourceID, let source = sourceStore.source(id: sourceID) else { throw SourceError.invalid("找不到此书的书源，请重新导入原书源。") }
+        if let book {
+            let revision = LibraryStore.shared.cacheRevision(for: book.id)
+            let text = try await chapterRequests.load(chapter, book: book, source: source, revision: revision)
+            guard sourceStore.source(id: sourceID) == source else { throw SourceError.invalid("书源已变化，请重新加载。") }
+            return text
+        }
         return try await loadChapter(chapter, source: source, book: book)
     }
 

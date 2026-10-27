@@ -125,7 +125,8 @@ final class YueduFollowingViewController: UITableViewController {
                 cell.accessoryView = toggle
             } else {
                 cell.textLabel?.text = manager.message
-                cell.textLabel?.font = .systemFont(ofSize: 13)
+                cell.textLabel?.font = .yueduUI(ofSize: 13)
+                cell.textLabel?.adjustsFontForContentSizeCategory = true
                 cell.accessibilityIdentifier = "following.status"
             }
         } else if books.isEmpty {

@@ -84,12 +84,18 @@ struct YueduChapterBody: Hashable {
 /// leave unreferenced files, but can never publish references to unwritten text.
 final class YueduChapterStorage {
     private let queue = DispatchQueue(label: "Yuedu.library.storage", qos: .userInitiated)
+    private let checkpointQueue = DispatchQueue(label: "Yuedu.library.checkpoint", qos: .userInitiated)
     private let file: URL
+    private let readingFile: URL
+    private var readingState: YueduReadingCheckpoint?
+    private var unreadableReadingState = false
+    private(set) var canSaveReadingState = false
     private(set) var migrationError: String?
     let directory: URL
 
     init(directory: URL) {
         file = directory.appendingPathComponent("library.json")
+        readingFile = directory.appendingPathComponent("reading-state.json")
         self.directory = directory.appendingPathComponent("chapter-content", isDirectory: true)
     }
 
@@ -101,11 +107,33 @@ final class YueduChapterStorage {
             let data = try Data(contentsOf: file)
             let decoder = JSONDecoder()
             decoder.userInfo[.yueduChapterDirectory] = directory
-            let saved = try decoder.decode(LibraryStore.Snapshot.self, from: data)
+            var saved = try decoder.decode(LibraryStore.Snapshot.self, from: data)
             if let version = saved.storageVersion, version != 2 {
                 throw SourceError.invalid("书架存储版本不受支持，原文件已保留。")
             }
             if saved.storageVersion == 2 {
+                readingState = YueduReadingCheckpoint(generation: saved.readingGeneration,
+                                                 seconds: saved.readingSeconds, dates: saved.readingDates)
+                canSaveReadingState = true
+                if manager.fileExists(atPath: readingFile.path) {
+                    do {
+                        let state = try decoder.decode(YueduReadingCheckpoint.self, from: Data(contentsOf: readingFile))
+                        guard state.seconds.isFinite, state.seconds >= 0 else {
+                            throw SourceError.invalid("阅读时长数据无效。")
+                        }
+                        if state.generation == saved.readingGeneration {
+                            for index in saved.books.indices {
+                                state.positions[saved.books[index].id]?.apply(to: &saved.books[index])
+                            }
+                            saved.readingSeconds = state.seconds
+                            saved.readingDates = state.dates
+                            readingState = state
+                        }
+                    } catch {
+                        unreadableReadingState = true
+                        migrationError = "阅读记录读取失败，原文件已保留，暂不能保存：\(error.localizedDescription)"
+                    }
+                }
                 removeUnreferencedFiles(keeping: references(in: saved))
                 return saved
             }
@@ -123,10 +151,27 @@ final class YueduChapterStorage {
 
     func save(_ snapshot: LibraryStore.Snapshot) throws -> LibraryStore.Snapshot {
         try queue.sync {
+            guard !unreadableReadingState else { throw SourceError.invalid(migrationError ?? "阅读记录无法读取。") }
             if migrationError != nil { try preserveLegacy(Data(contentsOf: file)) }
             let saved = try write(snapshot)
             migrationError = nil
             return saved
+        }
+    }
+
+    func saveReading(bookID: UUID? = nil, position: YueduReadingCheckpoint.Position? = nil,
+                     seconds: Double, dates: [String]) throws {
+        try checkpointQueue.sync {
+            guard !unreadableReadingState, var state = readingState,
+                  (try? FileManager.default.attributesOfItem(atPath: file.path)[.type] as? FileAttributeType) == .typeRegular else {
+                throw SourceError.invalid(migrationError ?? "书架存储不可用，请稍后重试。")
+            }
+            if let bookID, let position { state.positions[bookID] = position }
+            state.seconds = seconds
+            state.dates = dates
+            try JSONEncoder().encode(state).write(to: readingFile,
+                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            readingState = state
         }
     }
 
@@ -164,6 +209,7 @@ final class YueduChapterStorage {
         }
         var metadata = snapshot
         metadata.storageVersion = 2
+        metadata.readingGeneration = UUID()
         var created: [URL] = []
         do {
             for book in metadata.books.indices {
@@ -183,6 +229,11 @@ final class YueduChapterStorage {
             let encoder = JSONEncoder()
             encoder.userInfo[.yueduMetadataOnly] = true
             try encoder.encode(metadata).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            readingState = YueduReadingCheckpoint(generation: metadata.readingGeneration,
+                                             seconds: metadata.readingSeconds, dates: metadata.readingDates)
+            canSaveReadingState = true
+            // Old checkpoints are harmless because their generation no longer matches.
+            try? manager.removeItem(at: readingFile)
         } catch {
             for url in created { try? manager.removeItem(at: url) }
             throw error

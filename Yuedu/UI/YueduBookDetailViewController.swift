@@ -77,7 +77,7 @@ final class YueduBookDetailViewController: UITableViewController {
         cell.accessoryType = .disclosureIndicator
         if indexPath.section == 0 {
             content.text = book.title
-            content.textProperties.font = .readingSerif(24)
+            content.textProperties.font = .yueduUISerif(24)
             content.secondaryText = "\(book.author) · \(book.sourceName)\n\(book.chapters.count) 章 · 已缓存 \(book.cachedChapterCount) 章\n\n\(book.summary)"
             cell.accessoryType = .none
             cell.selectionStyle = .none

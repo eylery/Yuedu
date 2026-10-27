@@ -15,6 +15,10 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     private var pendingFraction: Double?
     private var previousNavigationBarHidden = false
     private var loadTask: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
+    private var prefetchExpiry: Task<Void, Never>?
+    private var prefetchChapterID: UUID?
+    private let progressRetryButton = UIButton(type: .system)
     private var purificationTask: Task<Void, Never>?
     private var purificationToken = UUID()
     private var originalBody = ""
@@ -85,6 +89,8 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     deinit {
         loadTask?.cancel()
+        prefetchTask?.cancel()
+        prefetchExpiry?.cancel()
         purificationTask?.cancel()
         saveWork?.cancel()
         sessionTimer?.invalidate()
@@ -103,14 +109,17 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         navigationItem.largeTitleDisplayMode = .never
         synthesizer.delegate = self
         buildInterface()
+        buildProgressNotice()
         applyPalette()
         NotificationCenter.default.addObserver(self, selector: #selector(enterBackground), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(enterForeground), name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(catalogChanged(_:)), name: .yueduCatalogChanged, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(purificationChanged), name: .yueduPurificationChanged, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(updateProgressNotice), name: .yueduReadingSaveChanged, object: nil)
         if let book, !book.chapters.isEmpty {
-            chapterIndex = min(max(0, book.progress.chapterIndex), book.chapters.count - 1)
-            showChapter(at: chapterIndex, fraction: book.progress.scrollFraction, saveCurrent: false)
+            let progress = LibraryStore.shared.resumeProgress(for: book)
+            chapterIndex = min(max(0, progress.chapterIndex), book.chapters.count - 1)
+            showChapter(at: chapterIndex, fraction: progress.scrollFraction, saveCurrent: false)
         } else {
             bookLabel.text = book?.title ?? "书籍不可用"
             chapterNumber.isHidden = true
@@ -130,7 +139,8 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         applyPreferences(ReaderPreferences.load())
         updateSystemBars()
         if hasAppeared, let book {
-            showChapter(at: book.progress.chapterIndex, fraction: book.progress.scrollFraction, saveCurrent: false)
+            let progress = LibraryStore.shared.resumeProgress(for: book)
+            showChapter(at: progress.chapterIndex, fraction: progress.scrollFraction, saveCurrent: false)
         }
     }
 
@@ -139,7 +149,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         if !hasAppeared {
             // Navigation and status bars can change the safe area several times
             // during the first presentation. Restore once in the settled viewport.
-            pendingFraction = book?.progress.scrollFraction ?? 0
+            pendingFraction = book.map { LibraryStore.shared.resumeProgress(for: $0).scrollFraction } ?? 0
             if contentAvailable {
                 configurePages(preservePosition: false)
                 restorePositionIfNeeded()
@@ -147,7 +157,10 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         }
         hasAppeared = true
         isVisible = true
+        LibraryStore.shared.retryReadingSaves()
+        updateProgressNotice()
         persistProgress()
+        prefetchIfNeeded()
         startReadingSession()
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.finishReadingSession()
@@ -159,6 +172,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         isVisible = false
+        stopPrefetch()
         saveWork?.cancel()
         persistProgress()
         pageReader.cancelPagination()
@@ -525,6 +539,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         finishReadingSession()
         stopSpeaking()
         loadTask?.cancel()
+        if prefetchChapterID != book.chapters[index].id { stopPrefetch() }
         purificationTask?.cancel()
         purificationToken = UUID()
         pageReader.cancelPagination()
@@ -589,6 +604,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
                     return
                 }
                 self.displayContent(content)
+                if self.prefetchChapterID == selected.id { self.stopPrefetch() }
             } catch {
                 guard !Task.isCancelled, let self, self.chapter?.id == selected.id else { return }
                 self.setStatus("章节加载失败\n\(error.localizedDescription)", loading: false, retry: true)
@@ -662,6 +678,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         restorePositionIfNeeded()
         startReadingSession()
         persistProgress()
+        prefetchIfNeeded()
     }
 
     private func setStatus(_ text: String, loading: Bool, retry: Bool) {
@@ -725,6 +742,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
 
     private func updateProgressDisplay() {
         updateBottomReadingInfo()
+        prefetchIfNeeded()
         let hasBookmark = nearbyBookmark != nil
         bookmarkButton.setImage(UIImage(systemName: hasBookmark ? "bookmark.fill" : "bookmark"), for: .normal)
         bookmarkButton.accessibilityLabel = hasBookmark ? "移除此处书签" : "添加书签"
@@ -752,6 +770,7 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
     }
 
     private func applyPreferences(_ preferences: ReaderPreferences) {
+        if !preferences.prefetchNextChapter { stopPrefetch() }
         let contentChanged = self.preferences.fontSize != preferences.fontSize
             || self.preferences.lineSpacing != preferences.lineSpacing
             || self.preferences.typography != preferences.typography
@@ -900,8 +919,79 @@ final class ReaderViewController: UIViewController, UIScrollViewDelegate, AVSpee
         LibraryStore.shared.recordReading(seconds: max(0, ProcessInfo.processInfo.systemUptime - start))
     }
 
-    @objc private func enterBackground() { saveWork?.cancel(); persistProgress(); finishReadingSession(); stopSpeaking() }
-    @objc private func enterForeground() { startReadingSession() }
+    @objc private func enterBackground() { stopPrefetch(); saveWork?.cancel(); persistProgress(); finishReadingSession(); stopSpeaking() }
+    @objc private func enterForeground() { LibraryStore.shared.retryReadingSaves(); startReadingSession(); prefetchIfNeeded() }
+
+    private func buildProgressNotice() {
+        progressRetryButton.setTitle("阅读进度未保存 · 点击重试", for: .normal)
+        progressRetryButton.titleLabel?.font = .preferredFont(forTextStyle: .footnote)
+        progressRetryButton.titleLabel?.adjustsFontForContentSizeCategory = true
+        progressRetryButton.titleLabel?.numberOfLines = 0
+        progressRetryButton.backgroundColor = Theme.surface
+        progressRetryButton.tintColor = Theme.ink
+        progressRetryButton.layer.cornerRadius = 12
+        progressRetryButton.accessibilityIdentifier = "reader.progressRetry"
+        progressRetryButton.addTarget(self, action: #selector(retryProgress), for: .touchUpInside)
+        progressRetryButton.isHidden = true
+        view.addSubview(progressRetryButton)
+        progressRetryButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            progressRetryButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            progressRetryButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 68),
+            progressRetryButton.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
+            progressRetryButton.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
+            progressRetryButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+        ])
+    }
+
+    @objc private func updateProgressNotice() {
+        let failed = LibraryStore.shared.readingSaveError != nil
+        progressRetryButton.isHidden = !failed
+        if failed { view.bringSubviewToFront(progressRetryButton) }
+    }
+
+    @objc private func retryProgress() {
+        if LibraryStore.shared.retryReadingSaves() { showToast("阅读记录已保存") }
+        updateProgressNotice()
+    }
+
+    private func stopPrefetch() {
+        prefetchTask?.cancel()
+        prefetchExpiry?.cancel()
+        prefetchTask = nil
+        prefetchExpiry = nil
+        prefetchChapterID = nil
+    }
+
+    private func prefetchIfNeeded() {
+        guard preferences.prefetchNextChapter, isVisible, contentAvailable, !readingToolsOpen,
+              UIApplication.shared.applicationState == .active, currentFraction >= 0.75,
+              let book, book.sourceID != nil, book.chapters.indices.contains(chapterIndex + 1) else { return }
+        let next = book.chapters[chapterIndex + 1]
+        guard !next.hasCachedContent, prefetchChapterID != next.id,
+              !YueduDownloadManager.shared.isQueued(bookID: book.id, chapterID: next.id) else { return }
+        stopPrefetch()
+        prefetchChapterID = next.id
+        let revision = LibraryStore.shared.cacheRevision(for: book.id)
+        prefetchTask = Task {
+            do {
+                let text = try await SourceEngine.shared.loadChapter(next, sourceID: book.sourceID, book: book)
+                try Task.checkCancellation()
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                if LibraryStore.shared.book(id: book.id)?.chapters.first(where: { $0.id == next.id })?.hasCachedContent != true {
+                    try LibraryStore.shared.cacheChapterContent(bookID: book.id, chapterID: next.id, text: text, revision: revision)
+                }
+            } catch { /* Prefetch is optional; opening the chapter still offers retry. */ }
+        }
+        prefetchExpiry = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 15_000_000_000) }
+            catch { return }
+            guard let self, self.prefetchChapterID == next.id else { return }
+            self.prefetchTask?.cancel()
+            self.prefetchTask = nil
+            // Remember the attempted chapter so scrolling does not repeatedly retry it.
+        }
+    }
     @objc private func goBack() {
         if navigationController != nil { navigationController?.popViewController(animated: true) }
         else { dismiss(animated: true) }

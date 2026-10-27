@@ -12,9 +12,13 @@ final class LibraryStore {
     private var hasUnreadableLibrary = false
     private let storage: YueduChapterStorage
     private var cacheRevisions: [UUID: Int] = [:]
+    private(set) var pendingPositions: [UUID: YueduReadingCheckpoint.Position] = [:]
+    private var pendingReadingSeconds: Double = 0
+    private(set) var readingSaveError: String?
 
     struct Snapshot: Codable {
         var storageVersion: Int? = nil
+        var readingGeneration: UUID? = nil
         var books: [Book]
         var bookmarks: [Bookmark]
         var readingSeconds: Double
@@ -71,14 +75,69 @@ final class LibraryStore {
         guard scrollFraction.isFinite,
               let index = books.firstIndex(where: { $0.id == bookID }),
               !books[index].chapters.isEmpty else { return false }
-        var updated = snapshot
-        updated.books[index].progress = ReadingProgress(chapterIndex: min(max(0, chapterIndex), books[index].chapters.count - 1), scrollFraction: min(1, max(0, scrollFraction)))
-        updated.books[index].lastReadAt = Date()
-        updated.books[index].consumeReadUpdates()
-        if updated.books[index].shelf?.state == .wanted {
-            updated.books[index].shelf?.state = .reading
+        let chapter = books[index].chapters[min(max(0, chapterIndex), books[index].chapters.count - 1)]
+        let position = YueduReadingCheckpoint.Position(chapterID: chapter.id,
+                                                  fraction: min(1, max(0, scrollFraction)), readAt: Date())
+        pendingPositions[bookID] = position
+        return savePendingPosition(bookID)
+    }
+
+    @discardableResult
+    private func savePendingPosition(_ bookID: UUID) -> Bool {
+        guard let position = pendingPositions[bookID], let index = books.firstIndex(where: { $0.id == bookID }),
+              books[index].chapters.contains(where: { $0.id == position.chapterID }) else {
+            pendingPositions[bookID] = nil
+            return false
         }
-        return persist(updated)
+        var book = books[index]
+        position.apply(to: &book)
+        do {
+            guard !hasUnreadableLibrary else { throw SourceError.invalid(persistenceError ?? "书架无法读取。") }
+            if storage.canSaveReadingState {
+                let unchanged = book.progress == books[index].progress
+                    && book.shelf == books[index].shelf
+                    && book.following == books[index].following
+                    && persistenceError == nil
+                    && Date().timeIntervalSince(books[index].lastReadAt ?? .distantPast) < 30
+                if !unchanged {
+                    try storage.saveReading(bookID: bookID, position: position, seconds: readingSeconds, dates: readingDates)
+                    books[index] = book
+                    NotificationCenter.default.post(name: .libraryChanged, object: nil)
+                }
+            } else {
+                var updated = snapshot
+                updated.books[index] = book
+                try commit(updated)
+            }
+            pendingPositions[bookID] = nil
+            if pendingPositions.isEmpty && pendingReadingSeconds == 0 {
+                readingSaveError = nil
+                persistenceError = nil
+            }
+            NotificationCenter.default.post(name: .yueduReadingSaveChanged, object: nil)
+            return true
+        } catch {
+            readingSaveError = "阅读进度未保存：\(error.localizedDescription)"
+            persistenceError = readingSaveError
+            NotificationCenter.default.post(name: .yueduReadingSaveChanged, object: nil)
+            return false
+        }
+    }
+
+    @discardableResult
+    func retryReadingSaves() -> Bool {
+        var succeeded = true
+        for id in Array(pendingPositions.keys) {
+            if !savePendingPosition(id) { succeeded = false }
+        }
+        if pendingReadingSeconds > 0, !saveReadingTime() { succeeded = false }
+        return succeeded
+    }
+
+    func resumeProgress(for book: Book) -> ReadingProgress {
+        var latest = book
+        pendingPositions[book.id]?.apply(to: &latest)
+        return latest.progress
     }
 
     func cacheRevision(for bookID: UUID) -> Int { cacheRevisions[bookID, default: 0] }
@@ -141,6 +200,9 @@ final class LibraryStore {
         readingSeconds = snapshot.readingSeconds
         readingDates = snapshot.readingDates
         shelfGroups = snapshot.shelfGroups ?? []
+        pendingPositions = pendingPositions.filter { id, position in
+            books.contains { $0.id == id && $0.chapters.contains { $0.id == position.chapterID } }
+        }
         persistenceError = nil
         for id in ids { cacheRevisions[id, default: 0] += 1 }
         storage.removeRetiredFiles(from: previous, keeping: snapshot)
@@ -167,16 +229,42 @@ final class LibraryStore {
 
     @discardableResult
     func recordReading(seconds: Double) -> Bool {
-        guard seconds.isFinite, seconds > 0, (readingSeconds + seconds).isFinite else { return false }
-        var updated = snapshot
-        updated.readingSeconds += seconds
+        guard seconds.isFinite, seconds > 0, (readingSeconds + pendingReadingSeconds + seconds).isFinite else { return false }
+        pendingReadingSeconds += seconds
+        return saveReadingTime()
+    }
+
+    private func saveReadingTime() -> Bool {
+        let seconds = readingSeconds + pendingReadingSeconds
+        var dates = readingDates
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "yyyy-MM-dd"
         let day = formatter.string(from: Date())
-        if !updated.readingDates.contains(day) { updated.readingDates.append(day) }
-        return persist(updated)
+        if !dates.contains(day) { dates.append(day) }
+        do {
+            guard !hasUnreadableLibrary else { throw SourceError.invalid(persistenceError ?? "书架无法读取。") }
+            if storage.canSaveReadingState {
+                try storage.saveReading(seconds: seconds, dates: dates)
+                readingSeconds = seconds
+                readingDates = dates
+            } else {
+                var updated = snapshot
+                updated.readingSeconds = seconds
+                updated.readingDates = dates
+                try commit(updated)
+            }
+            pendingReadingSeconds = 0
+            if pendingPositions.isEmpty { readingSaveError = nil; persistenceError = nil }
+            NotificationCenter.default.post(name: .yueduReadingSaveChanged, object: nil)
+            return true
+        } catch {
+            readingSaveError = "阅读记录未保存：\(error.localizedDescription)"
+            persistenceError = readingSaveError
+            NotificationCenter.default.post(name: .yueduReadingSaveChanged, object: nil)
+            return false
+        }
     }
 
     @discardableResult

@@ -52,7 +52,7 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
         updateFilterMenu()
         segments.selectedSegmentIndex = bookmarksInitiallySelected ? 1 : 0
         segments.selectedSegmentTintColor = Theme.surface
-        segments.setTitleTextAttributes([.foregroundColor: Theme.ink, .font: UIFont.systemFont(ofSize: 13, weight: .medium)], for: .normal)
+        segments.setTitleTextAttributes([.foregroundColor: Theme.ink, .font: UIFont.yueduUI(ofSize: 13, weight: .medium)], for: .normal)
         segments.addTarget(self, action: #selector(changeSegment), for: .valueChanged)
         segments.accessibilityIdentifier = "reader.contentsSegments"
         segments.translatesAutoresizingMaskIntoConstraints = false
@@ -72,7 +72,7 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
             segments.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
             segments.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
             segments.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
-            segments.heightAnchor.constraint(equalToConstant: 36),
+            segments.heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
             table.topAnchor.constraint(equalTo: segments.bottomAnchor, constant: 14),
             table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             table.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -81,7 +81,8 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
         emptyLabel.text = "还没有书签\n\n点击阅读页右上角的书签，\n把想再读的地方留下来。"
         emptyLabel.numberOfLines = 0
         emptyLabel.textAlignment = .center
-        emptyLabel.font = .systemFont(ofSize: 15)
+        emptyLabel.font = .yueduUI(ofSize: 15)
+        emptyLabel.adjustsFontForContentSizeCategory = true
         emptyLabel.textColor = Theme.secondary
         if followsLibrary {
             observer = NotificationCenter.default.addObserver(forName: .libraryChanged, object: nil, queue: .main) { [weak self] _ in
@@ -106,10 +107,10 @@ final class ReaderContentsViewController: UIViewController, UITableViewDataSourc
         cell.tintColor = Theme.accent
         var content = cell.defaultContentConfiguration()
         content.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 16, leading: 24, bottom: 16, trailing: 24)
-        content.textProperties.font = .systemFont(ofSize: 15, weight: .medium)
+        content.textProperties.font = .yueduUI(ofSize: 15, weight: .medium)
         content.textProperties.color = Theme.ink
         content.textProperties.numberOfLines = 2
-        content.secondaryTextProperties.font = .systemFont(ofSize: 11)
+        content.secondaryTextProperties.font = .yueduUI(ofSize: 11)
         content.secondaryTextProperties.color = Theme.secondary
         content.textToSecondaryTextVerticalPadding = 7
         if showingBookmarks {

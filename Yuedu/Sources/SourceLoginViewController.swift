@@ -55,7 +55,8 @@ final class SourceLoginViewController: UIViewController, UITextFieldDelegate {
         ])
         let eyebrow = label("SOURCE PREFERENCES", size: 10, weight: .semibold, color: Theme.accent)
         let name = label(source.bookSourceName, size: 27)
-        name.font = .readingSerif(27)
+        name.font = .yueduUISerif(27)
+        name.adjustsFontForContentSizeCategory = true
         let subtitle = label("管理此书源的账户、登录状态与阅读选项。", size: 13, color: Theme.secondary)
         let heading = UIStackView(arrangedSubviews: [eyebrow, name, subtitle])
         heading.axis = .vertical
@@ -68,7 +69,8 @@ final class SourceLoginViewController: UIViewController, UITextFieldDelegate {
         let variableTitle = label("书源变量", size: 15, weight: .semibold)
         let comment = source.rawFields["variableComment"]?.scalarString ?? "供书源保存筛选条件或自定义参数。"
         let variableDescription = label(String(comment.prefix(8_000)), size: 12, color: Theme.secondary)
-        variableInput.font = .systemFont(ofSize: 15)
+        variableInput.font = .yueduUI(ofSize: 15)
+        variableInput.adjustsFontForContentSizeCategory = true
         variableInput.textColor = Theme.ink
         variableInput.backgroundColor = Theme.bg
         variableInput.layer.cornerRadius = 10
@@ -81,7 +83,8 @@ final class SourceLoginViewController: UIViewController, UITextFieldDelegate {
         content.addArrangedSubview(card([variableTitle, variableDescription, variableInput]))
 
         statusLabel.numberOfLines = 0
-        statusLabel.font = .systemFont(ofSize: 13)
+        statusLabel.font = .yueduUI(ofSize: 13)
+        statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.textColor = Theme.secondary
         statusLabel.accessibilityIdentifier = "sources.loginStatus"
         activity.color = Theme.accent
@@ -211,7 +214,8 @@ final class SourceLoginViewController: UIViewController, UITextFieldDelegate {
                 let input = UITextField()
                 input.text = initial
                 input.placeholder = descriptor["placeholder"] as? String ?? descriptor["hint"] as? String ?? displayName
-                input.font = .systemFont(ofSize: 16)
+                input.font = .yueduUI(ofSize: 16)
+                input.adjustsFontForContentSizeCategory = true
                 input.textColor = Theme.ink
                 input.backgroundColor = Theme.bg
                 input.borderStyle = .roundedRect
@@ -364,7 +368,8 @@ final class SourceLoginViewController: UIViewController, UITextFieldDelegate {
         let label = UILabel()
         label.text = text
         label.numberOfLines = 0
-        label.font = .systemFont(ofSize: size, weight: weight)
+        label.font = .yueduUI(ofSize: size, weight: weight)
+        label.adjustsFontForContentSizeCategory = true
         label.textColor = color ?? Theme.ink
         return label
     }

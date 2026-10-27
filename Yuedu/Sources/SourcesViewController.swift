@@ -42,7 +42,8 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
         view.addSubview(table)
         table.pinEdges(to: view)
         let header = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 108))
-        countLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        countLabel.font = .yueduUI(ofSize: 12, weight: .medium)
+        countLabel.adjustsFontForContentSizeCategory = true
         countLabel.textColor = Theme.accent
         countLabel.numberOfLines = 2
         countLabel.accessibilityIdentifier = "sources.count"
@@ -58,7 +59,8 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 24),
             stack.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: header.topAnchor, constant: 22)
+            stack.topAnchor.constraint(equalTo: header.topAnchor, constant: 22),
+            stack.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -18)
         ])
         table.tableHeaderView = header
         observer = NotificationCenter.default.addObserver(forName: .sourcesChanged, object: nil, queue: .main) { [weak self] _ in
@@ -74,6 +76,11 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
         operation?.cancel()
         if let observer { NotificationCenter.default.removeObserver(observer) }
         if let checkObserver { NotificationCenter.default.removeObserver(checkObserver) }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        table.yueduFitHeader()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -143,8 +150,10 @@ final class SourcesViewController: UIViewController, UITableViewDataSource, UITa
         cell.backgroundColor = Theme.surface
         cell.textLabel?.textColor = Theme.ink
         cell.detailTextLabel?.textColor = Theme.secondary
-        cell.textLabel?.font = .systemFont(ofSize: 16, weight: .medium)
-        cell.detailTextLabel?.font = .systemFont(ofSize: 12)
+        cell.textLabel?.font = .yueduUI(ofSize: 16, weight: .medium)
+        cell.textLabel?.adjustsFontForContentSizeCategory = true
+        cell.detailTextLabel?.font = .yueduUI(ofSize: 12)
+        cell.detailTextLabel?.adjustsFontForContentSizeCategory = true
         cell.detailTextLabel?.numberOfLines = 2
         cell.tintColor = Theme.accent
         if indexPath.section == 1 {
@@ -426,7 +435,8 @@ private final class SourceEditorViewController: UIViewController {
         navigationItem.rightBarButtonItem = UIBarButtonItem(title: "保存", style: .done, target: self, action: #selector(save))
         let hint = UILabel()
         hint.text = "编辑完整 Legado JSON 配置。保存时检查字段结构；有错误的配置会保留并停用。"
-        hint.font = .systemFont(ofSize: 12)
+        hint.font = .yueduUI(ofSize: 12)
+        hint.adjustsFontForContentSizeCategory = true
         hint.textColor = Theme.secondary
         hint.numberOfLines = 0
         editor.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -462,7 +472,8 @@ private final class SourceEditorViewController: UIViewController {
         if let original, !original.isCompatible {
             let details = UIButton(type: .system)
             details.setTitle("查看兼容性说明  →", for: .normal)
-            details.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
+            details.titleLabel?.font = .yueduUI(ofSize: 13, weight: .medium)
+            details.titleLabel?.adjustsFontForContentSizeCategory = true
             details.tintColor = Theme.accent
             details.contentHorizontalAlignment = .leading
             details.accessibilityIdentifier = "sources.editor.compatibility"
@@ -614,16 +625,16 @@ private final class SourceImportReportViewController: UITableViewController {
         cell.backgroundColor = Theme.surface
         var content = cell.defaultContentConfiguration()
         content.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 19, leading: 18, bottom: 19, trailing: 18)
-        content.textProperties.font = .systemFont(ofSize: 15, weight: .semibold)
+        content.textProperties.font = .yueduUI(ofSize: 15, weight: .semibold)
         content.textProperties.color = Theme.ink
         content.textProperties.numberOfLines = 0
-        content.secondaryTextProperties.font = .systemFont(ofSize: 13)
+        content.secondaryTextProperties.font = .yueduUI(ofSize: 13)
         content.secondaryTextProperties.color = Theme.secondary
         content.secondaryTextProperties.numberOfLines = 0
         content.textToSecondaryTextVerticalPadding = 10
         if indexPath.section == 0 {
             content.text = summaryTitle
-            content.textProperties.font = .readingSerif(23)
+            content.textProperties.font = .yueduUISerif(23)
             content.secondaryText = summaryText
             cell.accessibilityIdentifier = "sources.importReport.summary"
         } else if issueRows.isEmpty {

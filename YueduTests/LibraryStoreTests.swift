@@ -92,12 +92,13 @@ final class LibraryStoreTests: XCTestCase {
         try FileManager.default.removeItem(at: file)
         try disk.write(to: file)
         XCTAssertTrue(store.updateProgress(bookID: book.id, chapterIndex: 1, scrollFraction: 0.8))
+        XCTAssertTrue(store.retryReadingSaves(), "Failed reading time remains pending until storage recovers")
         XCTAssertNil(store.persistenceError)
         let restored = LibraryStore(directory: directory)
         XCTAssertEqual(restored.book(id: book.id)?.progress.scrollFraction, 0.8)
         XCTAssertEqual(restored.books.count, 1)
         XCTAssertEqual(restored.bookmarks.map(\.id), [bookmarkID])
-        XCTAssertEqual(restored.readingSeconds, 0)
+        XCTAssertEqual(restored.readingSeconds, 60)
     }
 
     func testInvalidNumbersAndOrphanBookmarksDoNotPoisonStorage() throws {

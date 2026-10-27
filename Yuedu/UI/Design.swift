@@ -1,13 +1,17 @@
 import UIKit
 
 enum Theme {
-    static let bg = UIColor(hex: "F7F8F2")
-    static let surface = UIColor(hex: "FFFFFF")
-    static let ink = UIColor(hex: "263C32")
-    static let secondary = UIColor(hex: "8B9289")
-    static let accent = UIColor(hex: "456C53")
-    static let line = UIColor(hex: "E5E8DF")
-    static let pale = UIColor(hex: "EAF0E4")
+    static let bg = color("F7F8F2", dark: "191F1D")
+    static let surface = color("FFFFFF", dark: "27312B")
+    static let ink = color("263C32", dark: "E1E9E3")
+    static let secondary = color("727B70", dark: "A8B5AC")
+    static let accent = color("456C53", dark: "5C896B")
+    static let line = color("E5E8DF", dark: "3E4B42")
+    static let pale = color("EAF0E4", dark: "334639")
+
+    private static func color(_ light: String, dark: String) -> UIColor {
+        UIColor { UIColor(hex: $0.userInterfaceStyle == .dark ? dark : light) }
+    }
 }
 
 extension UIColor {
@@ -18,6 +22,14 @@ extension UIColor {
 }
 
 extension UIFont {
+    static func yueduUI(ofSize size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+        UIFontMetrics(forTextStyle: size >= 22 ? .title2 : .body)
+            .scaledFont(for: .systemFont(ofSize: size, weight: weight))
+    }
+
+    static func yueduUISerif(_ size: CGFloat) -> UIFont {
+        UIFontMetrics(forTextStyle: .title2).scaledFont(for: .readingSerif(size))
+    }
     static func readingSerif(_ size: CGFloat) -> UIFont {
         UIFont(name: "STSongti-SC-Regular", size: size)
             ?? UIFont(name: "SongtiSC-Regular", size: size)
@@ -48,9 +60,10 @@ extension UIViewController {
 func textLabel(_ text: String, size: CGFloat, weight: UIFont.Weight = .regular, color: UIColor = Theme.ink) -> UILabel {
     let label = UILabel()
     label.text = text
-    label.font = .systemFont(ofSize: size, weight: weight)
+    label.font = .yueduUI(ofSize: size, weight: weight)
     label.textColor = color
     label.numberOfLines = 0
+    label.adjustsFontForContentSizeCategory = true
     return label
 }
 
@@ -258,4 +271,28 @@ final class ActionCard: UIControl {
         accessibilityTraits = .button
     }
     required init?(coder: NSCoder) { fatalError() }
+}
+
+extension UITableView {
+    func yueduFitHeader() {
+        guard let header = tableHeaderView, bounds.width > 0 else { return }
+        let size = header.systemLayoutSizeFitting(CGSize(width: bounds.width, height: 0),
+                                                  withHorizontalFittingPriority: .required,
+                                                  verticalFittingPriority: .fittingSizeLevel)
+        if abs(header.frame.height - size.height) > 1 || header.frame.width != bounds.width {
+            header.frame = CGRect(x: 0, y: 0, width: bounds.width, height: ceil(size.height))
+            tableHeaderView = header
+        }
+    }
+
+    func yueduFitFooter() {
+        guard let footer = tableFooterView, footer.subviews.count > 0, bounds.width > 0 else { return }
+        let size = footer.systemLayoutSizeFitting(CGSize(width: bounds.width, height: 0),
+                                                  withHorizontalFittingPriority: .required,
+                                                  verticalFittingPriority: .fittingSizeLevel)
+        if abs(footer.frame.height - size.height) > 1 || footer.frame.width != bounds.width {
+            footer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: ceil(size.height))
+            tableFooterView = footer
+        }
+    }
 }

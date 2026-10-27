@@ -85,7 +85,8 @@ final class YueduSourceCheckViewController: UITableViewController {
         cell.detailTextLabel?.numberOfLines = 0
         if indexPath.section == 0 {
             cell.textLabel?.text = checker.message
-            cell.textLabel?.font = .systemFont(ofSize: 13)
+            cell.textLabel?.font = .yueduUI(ofSize: 13)
+            cell.textLabel?.adjustsFontForContentSizeCategory = true
             cell.selectionStyle = .none
         } else {
             let source = sources[indexPath.row]

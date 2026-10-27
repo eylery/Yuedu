@@ -50,6 +50,7 @@ struct ReaderPreferences {
     var fullScreen = false
     var showsStatusBarInFullScreen = true
     var typography = YueduTypography()
+    var prefetchNextChapter = true
     var titleFontSize: CGFloat { min(42, fontSize + 7) }
     var minimumPageContentSize: CGSize {
         CGSize(width: fontSize * 4,
@@ -75,7 +76,8 @@ struct ReaderPreferences {
             turnStyle: turnStyle,
             fullScreen: defaults.bool(forKey: "reader.fullScreen"),
             showsStatusBarInFullScreen: defaults.object(forKey: "reader.fullScreenStatusBar") as? Bool ?? true,
-            typography: typography.sanitized()
+            typography: typography.sanitized(),
+            prefetchNextChapter: defaults.object(forKey: "reader.prefetchNextChapter") as? Bool ?? true
         )
     }
 
@@ -86,8 +88,12 @@ struct ReaderPreferences {
         defaults.set(turnStyle.rawValue, forKey: "reader.turnStyle")
         defaults.set(fullScreen, forKey: "reader.fullScreen")
         defaults.set(showsStatusBarInFullScreen, forKey: "reader.fullScreenStatusBar")
+        defaults.set(prefetchNextChapter, forKey: "reader.prefetchNextChapter")
         if let data = try? JSONEncoder().encode(typography.sanitized()) {
             defaults.set(data, forKey: "reader.typography")
+        }
+        if defaults === UserDefaults.standard {
+            NotificationCenter.default.post(name: .yueduAppearanceChanged, object: nil)
         }
     }
 
@@ -126,4 +132,8 @@ struct ReaderPreferences {
         }
         return result
     }
+}
+
+extension Notification.Name {
+    static let yueduAppearanceChanged = Notification.Name("Yuedu.appearanceChanged")
 }

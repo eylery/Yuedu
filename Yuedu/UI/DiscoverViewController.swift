@@ -72,14 +72,21 @@ final class DiscoverViewController: UITableViewController, UISearchResultsUpdati
         model.suspend()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        tableView.yueduFitHeader()
+    }
+
     private func buildFilterHeader() {
         let header = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 54))
-        groupButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .medium)
+        groupButton.titleLabel?.font = .yueduUI(ofSize: 14, weight: .medium)
+        groupButton.titleLabel?.adjustsFontForContentSizeCategory = true
         groupButton.titleLabel?.lineBreakMode = .byTruncatingTail
         groupButton.contentHorizontalAlignment = .leading
         groupButton.showsMenuAsPrimaryAction = true
         groupButton.accessibilityIdentifier = "discovery.groups"
-        countLabel.font = .systemFont(ofSize: 12)
+        countLabel.font = .yueduUI(ofSize: 12)
+        countLabel.adjustsFontForContentSizeCategory = true
         countLabel.textColor = Theme.secondary
         countLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         let row = hstack([groupButton, UIView(), countLabel], spacing: 12)
@@ -199,10 +206,12 @@ final class DiscoverViewController: UITableViewController, UISearchResultsUpdati
         cell.accessibilityValue = nil
         cell.backgroundColor = Theme.surface
         cell.textLabel?.textColor = Theme.ink
-        cell.textLabel?.font = .systemFont(ofSize: 16, weight: .medium)
+        cell.textLabel?.font = .yueduUI(ofSize: 16, weight: .medium)
+        cell.textLabel?.adjustsFontForContentSizeCategory = true
         cell.textLabel?.numberOfLines = 0
         cell.detailTextLabel?.textColor = Theme.secondary
-        cell.detailTextLabel?.font = .systemFont(ofSize: 12)
+        cell.detailTextLabel?.font = .yueduUI(ofSize: 12)
+        cell.detailTextLabel?.adjustsFontForContentSizeCategory = true
         cell.detailTextLabel?.numberOfLines = 0
         switch rows[indexPath.section][indexPath.row] {
         case .source:
@@ -219,13 +228,15 @@ final class DiscoverViewController: UITableViewController, UISearchResultsUpdati
             cell.accessoryView = chevron
         case .message(let message, let retry):
             cell.textLabel?.text = message
-            cell.textLabel?.font = .systemFont(ofSize: 13)
+            cell.textLabel?.font = .yueduUI(ofSize: 13)
+            cell.textLabel?.adjustsFontForContentSizeCategory = true
             cell.textLabel?.textColor = retry ? Theme.accent : Theme.secondary
             cell.selectionStyle = retry ? .default : .none
             cell.accessibilityIdentifier = retry ? "discovery.retry.\(source.bookSourceName)" : "discovery.loading"
         case .heading(let title):
             cell.textLabel?.text = title
-            cell.textLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+            cell.textLabel?.font = .yueduUI(ofSize: 13, weight: .semibold)
+            cell.textLabel?.adjustsFontForContentSizeCategory = true
             cell.textLabel?.textColor = Theme.secondary
         case .categories(let categories):
             let row = hstack([], spacing: 8)
@@ -241,7 +252,7 @@ final class DiscoverViewController: UITableViewController, UISearchResultsUpdati
                 config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 5, bottom: 12, trailing: 5)
                 config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
                     var result = attributes
-                    result.font = .systemFont(ofSize: 13, weight: .medium)
+                    result.font = .yueduUI(ofSize: 13, weight: .medium)
                     return result
                 }
                 button.configuration = config

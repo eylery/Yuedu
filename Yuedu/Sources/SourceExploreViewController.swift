@@ -51,7 +51,8 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         table.separatorInset = UIEdgeInsets(top: 0, left: 24, bottom: 0, right: 24)
         table.dataSource = self
         table.delegate = self
-        table.rowHeight = category == nil ? 76 : 102
+        table.rowHeight = UITableView.automaticDimension
+        table.estimatedRowHeight = category == nil ? 76 : 102
         table.contentInset.bottom = 20
         table.accessibilityIdentifier = "sourceExploreTable"
         refreshControl.tintColor = Theme.accent
@@ -66,9 +67,16 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         refresh()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        table.yueduFitHeader()
+        table.yueduFitFooter()
+    }
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.setNavigationBarHidden(false, animated: animated)
+        table.reloadData()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -83,21 +91,25 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         let header = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 156))
         let eyebrow = UILabel()
         eyebrow.text = category == nil ? "A LITTLE CURIOSITY" : "STORIES TO DISCOVER"
-        eyebrow.font = .systemFont(ofSize: 10, weight: .semibold)
+        eyebrow.font = .yueduUI(ofSize: 10, weight: .semibold)
+        eyebrow.adjustsFontForContentSizeCategory = true
         eyebrow.textColor = Theme.accent
         let heading = UILabel()
         heading.text = category?.title ?? "随兴翻阅，遇见好书。"
-        heading.font = .readingSerif(28)
+        heading.font = .yueduUISerif(28)
+        heading.adjustsFontForContentSizeCategory = true
         heading.textColor = Theme.ink
         heading.numberOfLines = 1
         heading.adjustsFontSizeToFitWidth = true
         heading.minimumScaleFactor = 0.65
         let sourceLabel = UILabel()
         sourceLabel.text = source.bookSourceName
-        sourceLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        sourceLabel.font = .yueduUI(ofSize: 12, weight: .medium)
+        sourceLabel.adjustsFontForContentSizeCategory = true
         sourceLabel.textColor = Theme.secondary
         sourceLabel.lineBreakMode = .byTruncatingTail
-        statusLabel.font = .systemFont(ofSize: 12)
+        statusLabel.font = .yueduUI(ofSize: 12)
+        statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.textColor = Theme.secondary
         statusLabel.numberOfLines = 2
         progress.color = Theme.accent
@@ -118,6 +130,7 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
             statusLabel.topAnchor.constraint(equalTo: sourceLabel.bottomAnchor, constant: 13),
             statusLabel.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             statusLabel.trailingAnchor.constraint(equalTo: progress.leadingAnchor, constant: -12),
+            statusLabel.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -18),
             progress.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
             progress.trailingAnchor.constraint(equalTo: heading.trailingAnchor)
         ])
@@ -128,16 +141,19 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         let icon = UIImageView(image: UIImage(systemName: category == nil ? "square.grid.2x2" : "book.closed"))
         icon.tintColor = Theme.accent.withAlphaComponent(0.8)
         icon.contentMode = .scaleAspectFit
-        emptyTitle.font = .readingSerif(21)
+        emptyTitle.font = .yueduUISerif(21)
+        emptyTitle.adjustsFontForContentSizeCategory = true
         emptyTitle.textColor = Theme.ink
         emptyTitle.textAlignment = .center
-        emptyDetail.font = .systemFont(ofSize: 13)
+        emptyDetail.font = .yueduUI(ofSize: 13)
+        emptyDetail.adjustsFontForContentSizeCategory = true
         emptyDetail.textColor = Theme.secondary
         emptyDetail.numberOfLines = 5
         emptyDetail.textAlignment = .center
         retryButton.setTitle("重新加载", for: .normal)
         retryButton.tintColor = Theme.accent
-        retryButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        retryButton.titleLabel?.font = .yueduUI(ofSize: 14, weight: .semibold)
+        retryButton.titleLabel?.adjustsFontForContentSizeCategory = true
         retryButton.addTarget(self, action: #selector(refresh), for: .touchUpInside)
         let stack = UIStackView(arrangedSubviews: [icon, emptyTitle, emptyDetail, retryButton])
         stack.axis = .vertical
@@ -158,12 +174,14 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
 
     private func buildFooter() {
         footer.frame.size.height = 114
-        footerLabel.font = .systemFont(ofSize: 12)
+        footerLabel.font = .yueduUI(ofSize: 12)
+        footerLabel.adjustsFontForContentSizeCategory = true
         footerLabel.textColor = Theme.secondary
         footerLabel.numberOfLines = 2
         footerLabel.textAlignment = .center
         nextButton.tintColor = Theme.accent
-        nextButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        nextButton.titleLabel?.font = .yueduUI(ofSize: 14, weight: .semibold)
+        nextButton.titleLabel?.adjustsFontForContentSizeCategory = true
         nextButton.backgroundColor = Theme.surface
         nextButton.layer.cornerRadius = 12
         nextButton.accessibilityIdentifier = "sourceExploreNextPage"
@@ -176,10 +194,11 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
             nextButton.topAnchor.constraint(equalTo: footer.topAnchor, constant: 16),
             nextButton.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 24),
             nextButton.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -24),
-            nextButton.heightAnchor.constraint(equalToConstant: 44),
+            nextButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             footerLabel.topAnchor.constraint(equalTo: nextButton.bottomAnchor, constant: 10),
             footerLabel.leadingAnchor.constraint(equalTo: nextButton.leadingAnchor),
-            footerLabel.trailingAnchor.constraint(equalTo: nextButton.trailingAnchor)
+            footerLabel.trailingAnchor.constraint(equalTo: nextButton.trailingAnchor),
+            footerLabel.bottomAnchor.constraint(equalTo: footer.bottomAnchor, constant: -18)
         ])
     }
 
@@ -193,7 +212,7 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
             navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "arrow.clockwise"), style: .plain, target: self, action: #selector(refresh))
             navigationItem.rightBarButtonItem?.accessibilityLabel = "刷新"
         }
-        table.allowsSelection = !isBusy
+        table.allowsSelection = !isBusy || (category != nil && !books.isEmpty)
         let isEmpty = category == nil ? categories.isEmpty : books.isEmpty
         table.backgroundView = isEmpty ? emptyPanel : nil
         retryButton.isHidden = isBusy || errorMessage == nil
@@ -312,10 +331,12 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         let identifier = category == nil ? "exploreCategory" : "exploreBook"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier) ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
         cell.backgroundColor = Theme.bg
-        cell.textLabel?.font = .readingSerif(category == nil ? 19 : 18)
+        cell.textLabel?.font = .yueduUISerif(category == nil ? 19 : 18)
+        cell.textLabel?.adjustsFontForContentSizeCategory = true
         cell.textLabel?.textColor = Theme.ink
-        cell.textLabel?.numberOfLines = 1
-        cell.detailTextLabel?.font = .systemFont(ofSize: 12)
+        cell.textLabel?.numberOfLines = 2
+        cell.detailTextLabel?.font = .yueduUI(ofSize: 12)
+        cell.detailTextLabel?.adjustsFontForContentSizeCategory = true
         cell.detailTextLabel?.textColor = Theme.secondary
         cell.detailTextLabel?.numberOfLines = category == nil ? 1 : 2
         cell.accessoryType = .disclosureIndicator
@@ -330,7 +351,9 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
         } else {
             let book = books[indexPath.row]
             cell.textLabel?.text = book.title
-            cell.detailTextLabel?.text = book.author + "\n" + (book.summary.isEmpty ? "查看目录并加入书架" : book.summary)
+            let saved = LibraryStore.shared.books.contains { $0.sourceID == book.sourceID && $0.bookURL == book.bookURL }
+            cell.detailTextLabel?.text = book.author + (saved ? " · 已在书架，可继续阅读" : "")
+                + "\n" + (book.summary.isEmpty ? "查看详情、目录与试读" : book.summary)
             cell.imageView?.image = UIImage(systemName: "book.closed.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 29, weight: .light))
         }
         return cell
@@ -338,50 +361,20 @@ final class SourceExploreViewController: UIViewController, UITableViewDataSource
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        guard !isBusy else { return }
         if category == nil {
+            guard !isBusy else { return }
             guard !categories[indexPath.row].url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             navigationController?.pushViewController(SourceExploreViewController(source: source, category: categories[indexPath.row]), animated: true)
         } else {
             let book = books[indexPath.row]
-            let message = book.author + (book.summary.isEmpty ? "" : "\n\n" + String(book.summary.prefix(400)))
-            let alert = UIAlertController(title: book.title, message: message, preferredStyle: .actionSheet)
-            alert.addAction(UIAlertAction(title: "加入书架并阅读", style: .default) { [weak self] _ in self?.add(book, read: true) })
-            alert.addAction(UIAlertAction(title: "加入书架", style: .default) { [weak self] _ in self?.add(book, read: false) })
-            alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-            if let popover = alert.popoverPresentationController {
-                popover.sourceView = tableView
-                popover.sourceRect = tableView.rectForRow(at: indexPath)
+            if isBusy { cancel() }
+            let author = YueduSearchIdentity.authorKey(book.author)
+            let records = books.filter {
+                $0.id == book.id || (author != nil && YueduSearchIdentity.authorKey($0.author) == author
+                    && YueduSearchIdentity.titleKey($0.title) == YueduSearchIdentity.titleKey(book.title))
             }
-            present(alert, animated: true)
+            navigationController?.pushViewController(YueduSearchBookViewController(versions: records), animated: true)
         }
     }
 
-    private func add(_ result: SourceSearchResult, read: Bool) {
-        let token = begin("正在加载《\(result.title)》目录…")
-        let source = source
-        operation = Task { [weak self] in
-            do {
-                let book = try await SourceEngine.shared.loadBook(result, source: source)
-                try Task.checkCancellation()
-                guard let self, self.generation == token else { return }
-                let saved = LibraryStore.shared.add(book)
-                if let error = LibraryStore.shared.persistenceError {
-                    throw SourceError.invalid(error)
-                }
-                self.isBusy = false
-                self.statusLabel.text = "已加入书架 · \(saved.chapters.count) 章"
-                self.updateChrome()
-                if read { self.navigationController?.pushViewController(ReaderViewController(bookID: saved.id), animated: true) }
-                else { self.showMessage("已加入书架", "《\(saved.title)》共 \(saved.chapters.count) 章，打开书架即可阅读。") }
-            } catch is CancellationError { }
-            catch {
-                guard let self, self.generation == token else { return }
-                self.isBusy = false
-                self.statusLabel.text = "加入书架失败 · 点击书目重试"
-                self.updateChrome()
-                self.showMessage("无法加入书架", error.localizedDescription)
-            }
-        }
-    }
 }

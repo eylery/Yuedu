@@ -19,6 +19,12 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     private let morePanel = UIView()
     private let model = YueduOnlineSearchModel()
     private let history = YueduSearchHistory()
+    private let preferences = YueduSearchPreferences()
+    private var dataSource: UITableViewDiffableDataSource<Int, String>!
+    private var rowsByID: [String: YueduSearchRow] = [:]
+    private var pendingRender: DispatchWorkItem?
+    private var renderAfterScrolling = false
+    private let initialQuery: String?
     private var scope: Set<UUID>?
     private var match: YueduSearchMatch = .all
     private var sort: YueduSearchSort = .relevance
@@ -36,7 +42,8 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     private let switchingProgress: ReadingProgress?
     private var didStartSwitchSearch = false
 
-    init(switchingBookID: UUID? = nil, switchingProgress: ReadingProgress? = nil) {
+    init(switchingBookID: UUID? = nil, switchingProgress: ReadingProgress? = nil, initialQuery: String? = nil) {
+        self.initialQuery = initialQuery
         self.switchingBookID = switchingBookID
         self.switchingProgress = switchingProgress
         super.init(nibName: nil, bundle: nil)
@@ -52,12 +59,19 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         navigationItem.rightBarButtonItem?.accessibilityLabel = "管理书源"
         table.backgroundColor = Theme.bg
         table.separatorColor = Theme.line
-        table.dataSource = self
         table.delegate = self
         table.keyboardDismissMode = .onDrag
         table.rowHeight = UITableView.automaticDimension
         table.estimatedRowHeight = 112
         table.register(UITableViewCell.self, forCellReuseIdentifier: "YueduSearchResult")
+        dataSource = UITableViewDiffableDataSource<Int, String>(tableView: table) { [weak self] table, indexPath, id in
+            guard let self, let row = self.rowsByID[id] else { return nil }
+            return self.resultCell(table, at: indexPath, row: row)
+        }
+        if switchingBookID == nil, let savedScope = preferences.scope {
+            let valid = savedScope.intersection(availableSources.map(\.id))
+            scope = valid.isEmpty ? nil : valid
+        }
         table.contentInset.bottom = 20
         table.accessibilityIdentifier = "search.results"
         view.addSubview(table)
@@ -75,7 +89,7 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         ])
         buildEmptyState()
         buildMorePanel()
-        model.onChange = { [weak self] in self?.renderSearch() }
+        model.onChange = { [weak self] in self?.scheduleRender() }
         observer = NotificationCenter.default.addObserver(forName: .sourcesChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -109,6 +123,10 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        if !hasSearched, switchingBookID == nil, let initialQuery, !initialQuery.isEmpty {
+            searchBar.text = initialQuery
+            submitSearch()
+        }
         if !didStartSwitchSearch, let switchingBookID,
            let book = LibraryStore.shared.book(id: switchingBookID) {
             didStartSwitchSearch = true
@@ -119,6 +137,7 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
 
     deinit {
         operation?.cancel()
+        pendingRender?.cancel()
         if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 
@@ -138,15 +157,17 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         searchBar.tintColor = Theme.accent
         searchBar.searchTextField.backgroundColor = Theme.surface
         searchBar.searchTextField.textColor = Theme.ink
-        searchBar.searchTextField.font = .systemFont(ofSize: 16)
+        searchBar.searchTextField.font = .yueduUI(ofSize: 16)
+        searchBar.searchTextField.adjustsFontForContentSizeCategory = true
         searchBar.searchTextField.returnKeyType = .search
         searchBar.searchTextField.autocorrectionType = .no
         searchBar.delegate = self
         searchButton.setTitle("搜索", for: .normal)
-        searchButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        searchButton.titleLabel?.font = .yueduUI(ofSize: 16, weight: .semibold)
+        searchButton.titleLabel?.adjustsFontForContentSizeCategory = true
         searchButton.accessibilityIdentifier = "search.submit"
         searchButton.addTarget(self, action: #selector(submitSearch), for: .touchUpInside)
-        searchButton.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        searchButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
         let input = UIStackView(arrangedSubviews: [searchBar, searchButton])
         input.alignment = .center
         input.spacing = 4
@@ -172,7 +193,8 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         matchControl.heightAnchor.constraint(equalToConstant: 34).isActive = true
         header.addArrangedSubview(matchControl)
 
-        statusLabel.font = .systemFont(ofSize: 12)
+        statusLabel.font = .yueduUI(ofSize: 12)
+        statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.textColor = Theme.secondary
         statusLabel.numberOfLines = 2
         statusLabel.accessibilityIdentifier = "search.status"
@@ -191,7 +213,8 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         header.addArrangedSubview(status)
         for button in [sourceButton, filterButton, historyButton, failureButton, stopButton] {
             button.tintColor = Theme.accent
-            button.titleLabel?.font = .systemFont(ofSize: 13)
+            button.titleLabel?.font = .yueduUI(ofSize: 13)
+            button.titleLabel?.adjustsFontForContentSizeCategory = true
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -199,14 +222,17 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     }
 
     private func buildEmptyState() {
-        emptyTitle.font = .readingSerif(22)
+        emptyTitle.font = .yueduUISerif(22)
+        emptyTitle.adjustsFontForContentSizeCategory = true
         emptyTitle.textColor = Theme.ink
         emptyTitle.textAlignment = .center
-        emptyDetail.font = .systemFont(ofSize: 14)
+        emptyDetail.font = .yueduUI(ofSize: 14)
+        emptyDetail.adjustsFontForContentSizeCategory = true
         emptyDetail.textColor = Theme.secondary
         emptyDetail.numberOfLines = 0
         emptyDetail.textAlignment = .center
-        emptyAction.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+        emptyAction.titleLabel?.font = .yueduUI(ofSize: 15, weight: .medium)
+        emptyAction.titleLabel?.adjustsFontForContentSizeCategory = true
         emptyAction.accessibilityIdentifier = "search.emptyAction"
         emptyAction.addTarget(self, action: #selector(handleEmptyAction), for: .touchUpInside)
         recentStack.axis = .vertical
@@ -256,7 +282,8 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
     private func buildMorePanel() {
         morePanel.frame.size.height = 76
         moreButton.accessibilityIdentifier = "search.more"
-        moreButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .medium)
+        moreButton.titleLabel?.font = .yueduUI(ofSize: 14, weight: .medium)
+        moreButton.titleLabel?.adjustsFontForContentSizeCategory = true
         moreButton.addTarget(self, action: #selector(loadMore), for: .touchUpInside)
         morePanel.addSubview(moreButton)
         moreButton.translatesAutoresizingMaskIntoConstraints = false
@@ -272,7 +299,7 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         let canContinue = hasSearched && (model.canLoadMore || !model.failures.isEmpty)
         table.tableFooterView = rows.isEmpty ? emptyPanel : morePanel
         moreButton.isEnabled = !isBusy && canContinue
-        let caption = model.canLoadMore ? (model.wasCancelled ? "继续搜索" : "加载更多结果")
+        let caption = model.wasCancelled && model.canLoadMore ? "继续搜索" : model.remainingSourceCount > 0 ? "扩大搜索 · 还有 \(model.remainingSourceCount) 个书源" : model.canLoadMore ? "加载更多结果"
             : (!model.failures.isEmpty ? "重试失败书源" : "已展示全部结果")
         moreButton.setTitle(isBusy ? "正在搜索…" : caption, for: .normal)
         recentStack.isHidden = hasSearched || history.queries.isEmpty || availableSources.isEmpty
@@ -401,15 +428,51 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         searchBar.text = query
         updateSearchButton()
         hasSearched = true
+        rows = []
         history.record(query)
         updateMenus()
         model.search(query, sources: selectedSources)
         table.setContentOffset(CGPoint(x: 0, y: -table.adjustedContentInset.top), animated: false)
     }
 
-    private func renderSearch() {
+    private func scheduleRender() {
+        pendingRender?.cancel()
+        if table.isDragging || table.isDecelerating {
+            renderAfterScrolling = true
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in self?.renderSearch(preserveOrder: true) }
+        pendingRender = work
+        if model.isSearching { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work) }
+        else { work.perform() }
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { finishScrolling() }
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { finishScrolling() }
+    }
+
+    private func finishScrolling() {
+        if renderAfterScrolling {
+            renderAfterScrolling = false
+            scheduleRender()
+        }
+    }
+
+    private func renderSearch(preserveOrder: Bool = false) {
+        pendingRender?.cancel()
+        let anchorPath = table.indexPathsForVisibleRows?.sorted().first
+        let anchorID = anchorPath.flatMap { dataSource.itemIdentifier(for: $0) }
+        let anchorOffset = anchorPath.map { table.rectForRow(at: $0).minY - table.contentOffset.y }
+        let previousRows = rows
         let requiredTitle = switchingBookID.flatMap { LibraryStore.shared.book(id: $0)?.title }
         rows = model.rows(match: match, sort: sort, merge: mergeVersions && switchingBookID == nil, requiredTitle: requiredTitle)
+        if preserveOrder {
+            let incoming = Dictionary(uniqueKeysWithValues: rows.map { ($0.identity(merged: mergeVersions && switchingBookID == nil), $0) })
+            let oldIDs = Set(previousRows.map { $0.identity(merged: mergeVersions && switchingBookID == nil) })
+            rows = previousRows.compactMap { incoming[$0.identity(merged: mergeVersions && switchingBookID == nil)] }
+                + rows.filter { !oldIDs.contains($0.identity(merged: mergeVersions && switchingBookID == nil)) }
+        }
         setBusy(model.isSearching)
         let count = "\(rows.count) 条匹配 · 累计 \(model.results.count) 条收录"
         if !hasSearched {
@@ -422,7 +485,20 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
                 + (model.sourcesChanged ? "\n书源已变更，重新搜索可更新范围" : "")
         }
         failureButton.isHidden = model.failures.isEmpty
-        table.reloadData()
+        let oldRows = rowsByID
+        rowsByID = Dictionary(uniqueKeysWithValues: rows.map { ($0.identity(merged: mergeVersions && switchingBookID == nil), $0) })
+        let ids = rows.map { $0.identity(merged: mergeVersions && switchingBookID == nil) }
+        var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
+        snapshot.appendSections([0])
+        snapshot.appendItems(ids)
+        let existing = Set(dataSource.snapshot().itemIdentifiers)
+        snapshot.reconfigureItems(ids.filter { existing.contains($0) && (!preserveOrder || oldRows[$0]?.versions != rowsByID[$0]?.versions) })
+        dataSource.apply(snapshot, animatingDifferences: false)
+        if preserveOrder, let anchorID, let anchorOffset, let index = dataSource.indexPath(for: anchorID) {
+            table.layoutIfNeeded()
+            table.setContentOffset(CGPoint(x: 0, y: max(-table.adjustedContentInset.top,
+                table.rectForRow(at: index).minY - anchorOffset)), animated: false)
+        }
         updateEmptyState()
     }
 
@@ -478,6 +554,7 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         picker.onApply = { [weak self] ids in
             guard let self else { return }
             self.scope = ids
+            if self.switchingBookID == nil { self.preferences.scope = ids }
             self.updateSourceCount()
             if self.hasSearched { self.search(self.model.query) }
         }
@@ -491,13 +568,16 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { rows.count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let row = rows[indexPath.row]
+        resultCell(tableView, at: indexPath, row: rows[indexPath.row])
+    }
+
+    private func resultCell(_ tableView: UITableView, at indexPath: IndexPath, row: YueduSearchRow) -> UITableViewCell {
         let result = row.book
         let cell = tableView.dequeueReusableCell(withIdentifier: "YueduSearchResult", for: indexPath)
         cell.backgroundColor = Theme.bg
         var content = cell.defaultContentConfiguration()
         content.text = row.title
-        content.textProperties.font = .readingSerif(20)
+        content.textProperties.font = .yueduUISerif(20)
         content.textProperties.color = Theme.ink
         content.textProperties.numberOfLines = 2
         let saved = row.versions.contains { result in
@@ -514,7 +594,7 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
         }
         content.secondaryText = "\(row.author) · \(source)" + (saved ? " · 已在书架" : "") + "\n\(detail)"
         content.secondaryTextProperties.numberOfLines = 3
-        content.secondaryTextProperties.font = .systemFont(ofSize: 13)
+        content.secondaryTextProperties.font = .yueduUI(ofSize: 13)
         content.secondaryTextProperties.color = Theme.secondary
         content.image = UIImage(systemName: "book.closed.fill")
         content.imageProperties.tintColor = Theme.accent
@@ -574,7 +654,7 @@ final class OnlineSearchViewController: UIViewController, UITableViewDataSource,
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        let row = rows[indexPath.row]
+        guard let id = dataSource.itemIdentifier(for: indexPath), let row = rowsByID[id] else { return }
         let result = row.book
         if switchingBookID != nil {
             prepareSwitch(result)

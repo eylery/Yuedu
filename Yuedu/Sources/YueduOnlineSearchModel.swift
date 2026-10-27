@@ -20,6 +20,13 @@ struct YueduSearchRow {
     var title: String { YueduSearchIdentity.title(book.title) }
     var author: String { YueduSearchIdentity.author(book.author) }
     var sourceCount: Int { Set(versions.map(\.sourceID)).count }
+    func identity(merged: Bool) -> String {
+        if merged, !YueduSearchIdentity.titleKey(book.title).isEmpty,
+           let author = YueduSearchIdentity.authorKey(book.author) {
+            return "work:" + YueduSearchIdentity.titleKey(book.title) + "\u{1F}" + author
+        }
+        return book.id
+    }
 }
 
 @MainActor
@@ -56,6 +63,7 @@ final class YueduOnlineSearchModel {
     static let maximumConcurrentSearches = 4
     static let searchTimeout: TimeInterval = 12
     static let retryTimeout: TimeInterval = 30
+    static let initialSourceLimit = 12
     typealias Loader = (BookSource, String, Int) async throws -> [SourceSearchResult]
     typealias TimedLoader = (BookSource, String, Int, TimeInterval) async throws -> [SourceSearchResult]
     var onChange: (() -> Void)?
@@ -71,16 +79,21 @@ final class YueduOnlineSearchModel {
     private var tokens: [UUID: UUID] = [:]
     private var queue: [UUID] = []
     private var requestTimeout = searchTimeout
-    private var performance: [UUID: (source: BookSource, duration: TimeInterval, succeeded: Bool)] = [:]
+    private let preferences: YueduSearchPreferences
+    private var deferredSources: [UUID] = []
+    private var interruptedSources: [UUID] = []
+    var remainingSourceCount: Int { deferredSources.count }
 
-    init(loader: Loader? = nil) {
+    init(preferences: YueduSearchPreferences? = nil, loader: Loader? = nil) {
+        self.preferences = preferences ?? YueduSearchPreferences()
         self.loader = { source, query, page, timeout in
             if let loader { return try await loader(source, query, page) }
             return try await SourceEngine.shared.search(source: source, query: query, page: page, timeout: timeout)
         }
     }
 
-    init(timedLoader: @escaping TimedLoader) {
+    init(preferences: YueduSearchPreferences? = nil, timedLoader: @escaping TimedLoader) {
+        self.preferences = preferences ?? YueduSearchPreferences()
         loader = timedLoader
     }
 
@@ -92,7 +105,7 @@ final class YueduOnlineSearchModel {
 
     var isSearching: Bool { !tasks.isEmpty || !queue.isEmpty }
     var failures: [SourceState] { states.filter { $0.error != nil } }
-    var canLoadMore: Bool { states.contains { !$0.exhausted && $0.error == nil } }
+    var canLoadMore: Bool { !deferredSources.isEmpty || states.contains { !$0.exhausted && $0.error == nil } }
 
     func reset() {
         stop()
@@ -103,21 +116,45 @@ final class YueduOnlineSearchModel {
         total = 0
         wasCancelled = false
         sourcesChanged = false
+        deferredSources = []
+        interruptedSources = []
         onChange?()
     }
 
     func search(_ query: String, sources: [BookSource]) {
         stop()
+        interruptedSources = []
         self.query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         results = []
         var seen = Set<UUID>()
         states = Self.eligible(sources).filter { seen.insert($0.id).inserted }.map { SourceState(source: $0) }
         sourcesChanged = false
-        run(states.map { $0.source.id })
+        let priorities = Dictionary(uniqueKeysWithValues: states.map { ($0.source.id, preferences.priority(for: $0.source)) })
+        let ordered = states.enumerated().sorted {
+            let a = priorities[$0.element.source.id]!
+            let b = priorities[$1.element.source.id]!
+            if a.0 != b.0 { return a.0 < b.0 }
+            if a.1 != b.1 { return a.1 < b.1 }
+            return $0.offset < $1.offset
+        }.map { $0.element.source.id }
+        deferredSources = Array(ordered.dropFirst(Self.initialSourceLimit))
+        run(Array(ordered.prefix(Self.initialSourceLimit)))
     }
 
     func loadMore() {
         guard !isSearching else { return }
+        if !interruptedSources.isEmpty {
+            let next = interruptedSources
+            interruptedSources = []
+            run(next)
+            return
+        }
+        if !deferredSources.isEmpty {
+            let next = Array(deferredSources.prefix(Self.initialSourceLimit))
+            deferredSources.removeFirst(next.count)
+            run(next)
+            return
+        }
         run(states.filter { !$0.exhausted && $0.error == nil }.map { $0.source.id })
     }
 
@@ -128,6 +165,8 @@ final class YueduOnlineSearchModel {
 
     func cancel() {
         guard isSearching else { return }
+        let unfinished = Set(tasks.keys).union(queue)
+        interruptedSources = states.map { $0.source.id }.filter { unfinished.contains($0) }
         stop()
         wasCancelled = true
         onChange?()
@@ -144,6 +183,8 @@ final class YueduOnlineSearchModel {
             tasks.removeValue(forKey: id)?.cancel()
         }
         queue.removeAll { invalid.contains($0) }
+        deferredSources.removeAll { invalid.contains($0) }
+        interruptedSources.removeAll { invalid.contains($0) }
         states.removeAll { invalid.contains($0.source.id) }
         results.removeAll { invalid.contains($0.sourceID) }
         sourcesChanged = true
@@ -219,16 +260,10 @@ final class YueduOnlineSearchModel {
         completed = 0
         total = ids.count
         requestTimeout = timeout ?? Self.searchTimeout
-        // Prefer sources that responded successfully during this search session.
-        // Keep display/source sort order independent of request scheduling.
-        let sources = Dictionary(uniqueKeysWithValues: states.map { ($0.source.id, $0.source) })
-        func priority(_ id: UUID) -> (Int, TimeInterval) {
-            guard let record = performance[id], record.source == sources[id] else { return (1, 0) }
-            return record.succeeded ? (0, record.duration) : (2, 0)
-        }
+        let priorities = Dictionary(uniqueKeysWithValues: states.map { ($0.source.id, preferences.priority(for: $0.source)) })
         queue = ids.enumerated().sorted { left, right in
-            let a = priority(left.element)
-            let b = priority(right.element)
+            let a = priorities[left.element] ?? (1, 0)
+            let b = priorities[right.element] ?? (1, 0)
             if a.0 != b.0 { return a.0 < b.0 }
             if a.1 != b.1 { return a.1 < b.1 }
             return left.offset < right.offset
@@ -265,7 +300,7 @@ final class YueduOnlineSearchModel {
         tasks[id] = nil
         completed += 1
         states[index].error = error
-        performance[id] = (states[index].source, duration, error == nil)
+        preferences.record(states[index].source, duration: duration, succeeded: error == nil)
         if error == nil {
             var seen = Set(results.map(\.id))
             let added = incoming.filter { $0.sourceID == id && seen.insert($0.id).inserted }

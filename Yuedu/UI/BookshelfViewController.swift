@@ -118,7 +118,8 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
         let groupButton = UIButton(type: .system)
         let groupName = ungrouped ? "未分组" : store.shelfGroups.first(where: { $0.id == groupID })?.name ?? "全部分组"
         groupButton.setTitle(groupName + " ▾", for: .normal)
-        groupButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        groupButton.titleLabel?.font = .yueduUI(ofSize: 14, weight: .semibold)
+        groupButton.titleLabel?.adjustsFontForContentSizeCategory = true
         groupButton.titleLabel?.lineBreakMode = .byTruncatingTail
         groupButton.accessibilityIdentifier = "shelf.groups"
         groupButton.menu = groupFilterMenu()
@@ -228,9 +229,11 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
         let width = collection.bounds.width > 0 ? collection.bounds.width : view.bounds.width
         guard width > 50 else { return }
         let available = width - 50
-        let columns = min(6, max(2, Int((available + 19) / 117)))
+        let accessible = traitCollection.preferredContentSizeCategory.isAccessibilityCategory
+        let columns = accessible ? max(1, min(3, Int(available / 240))) : min(6, max(2, Int((available + 19) / 117)))
         let itemWidth = floor((available - CGFloat(columns - 1) * 19) / CGFloat(columns))
-        let itemSize = CGSize(width: itemWidth, height: ceil(itemWidth * 1.43) + 118)
+        let textHeight = UIFontMetrics.default.scaledValue(for: accessible ? 135 : 118)
+        let itemSize = CGSize(width: itemWidth, height: ceil(itemWidth * 1.43) + textHeight)
         let fitting = content.systemLayoutSizeFitting(CGSize(width: available, height: 0),
                                                        withHorizontalFittingPriority: .required,
                                                        verticalFittingPriority: .fittingSizeLevel)
@@ -424,11 +427,12 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
 
     private func continueCard(_ book: Book) -> UIView {
         let card = UIControl()
-        card.backgroundColor = UIColor(hex: "E8EDDF")
+        card.backgroundColor = Theme.pale
         card.layer.cornerRadius = 20
         let eyebrow = textLabel(book.lastReadAt == nil ? "从这一页开始  ·  START READING" : "接着上次，继续阅读", size: 10, weight: .medium, color: Theme.accent)
         let title = textLabel(book.title, size: 26)
-        title.font = .readingSerif(26)
+        title.font = .yueduUISerif(26)
+        title.adjustsFontForContentSizeCategory = true
         let detail = textLabel(book.lastReadAt == nil ? "\(book.author) · \(book.isSample ? "经典节选" : book.category)" : "\(book.currentChapterTitle) · \(Int(book.fractionRead * 100))%", size: 11, color: Theme.secondary)
         detail.numberOfLines = 1
         let arrow = textLabel(book.lastReadAt == nil ? "开始阅读  →" : "继续阅读  →", size: 12, weight: .semibold, color: Theme.accent)
@@ -521,9 +525,10 @@ final class BookshelfViewController: LibraryPageController, UIDocumentPickerDele
     }
 }
 
-final class LibrarySearchViewController: UITableViewController, UISearchResultsUpdating {
+final class LibrarySearchViewController: UITableViewController, UISearchResultsUpdating, UISearchControllerDelegate {
     private let search = UISearchController(searchResultsController: nil)
     private var results: [Book] = []
+    private var pendingOnlineQuery: String?
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "搜索书架"
@@ -531,14 +536,33 @@ final class LibrarySearchViewController: UITableViewController, UISearchResultsU
         navigationItem.searchController = search
         navigationItem.hidesSearchBarWhenScrolling = false
         search.searchResultsUpdater = self
+        search.delegate = self
         search.obscuresBackgroundDuringPresentation = false
+        search.hidesNavigationBarDuringPresentation = false
         search.searchBar.placeholder = "书名、作者或内容简介"
         definesPresentationContext = true
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "book")
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "在线搜索", primaryAction: UIAction { [weak self] _ in self?.navigationController?.pushViewController(OnlineSearchViewController(), animated: true) })
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "在线搜索", primaryAction: UIAction { [weak self] _ in self?.openOnlineSearch() })
+        navigationItem.rightBarButtonItem?.accessibilityIdentifier = "shelf.searchOnline"
         updateSearchResults(for: search)
     }
     override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); navigationController?.setNavigationBarHidden(false, animated: animated) }
+    private func openOnlineSearch() {
+        let query = search.searchBar.text
+        if search.isActive {
+            pendingOnlineQuery = query ?? ""
+            search.isActive = false
+            return
+        }
+        view.endEditing(true)
+        navigationController?.pushViewController(OnlineSearchViewController(initialQuery: query), animated: true)
+    }
+
+    func didDismissSearchController(_ searchController: UISearchController) {
+        guard let query = pendingOnlineQuery else { return }
+        pendingOnlineQuery = nil
+        navigationController?.pushViewController(OnlineSearchViewController(initialQuery: query), animated: true)
+    }
     func updateSearchResults(for searchController: UISearchController) {
         let term = (searchController.searchBar.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         results = YueduShelfQuery.books(LibraryStore.shared.books, showSamples: UserDefaults.standard.bool(forKey: "shelf.showSamples")).filter {

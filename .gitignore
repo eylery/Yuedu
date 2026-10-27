@@ -5,3 +5,5 @@ xcuserdata/
 .DS_Store
 *.xcresult
 *-output.log
+
+__pycache__/

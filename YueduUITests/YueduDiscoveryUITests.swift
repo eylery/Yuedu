@@ -50,6 +50,7 @@ final class YueduDiscoveryUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["reader.text"].waitForExistence(timeout: 12))
         XCTAssertTrue(app.staticTexts["reader.text"].label.contains("窗边的光"))
         app.buttons["reader.back"].tap()
+        app.navigationBars["书籍详情"].buttons.element(boundBy: 0).tap()
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(source.waitForExistence(timeout: 3))
         source.tap()

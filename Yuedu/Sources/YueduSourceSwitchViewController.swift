@@ -181,7 +181,8 @@ final class YueduSourceSwitchViewController: UITableViewController {
             let text = UITextView()
             text.text = verifiedText
             text.isEditable = false
-            text.font = .systemFont(ofSize: 18)
+            text.font = .yueduUI(ofSize: 18)
+            text.adjustsFontForContentSizeCategory = true
             text.backgroundColor = Theme.bg
             text.textColor = Theme.ink
             text.textContainerInset = UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)

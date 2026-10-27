@@ -75,7 +75,8 @@ final class YueduTypographyViewController: UIViewController, UIFontPickerViewCon
         fontButton.titleLabel?.numberOfLines = 2
         fontButton.accessibilityIdentifier = "typography.font"
         fontButton.showsMenuAsPrimaryAction = true
-        fontNotice.font = .systemFont(ofSize: 12)
+        fontNotice.font = .yueduUI(ofSize: 12)
+        fontNotice.adjustsFontForContentSizeCategory = true
         fontNotice.textColor = Theme.secondary
         fontNotice.numberOfLines = 0
         fontNotice.accessibilityIdentifier = "typography.fontNotice"

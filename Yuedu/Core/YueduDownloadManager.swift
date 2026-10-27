@@ -145,6 +145,10 @@ final class YueduDownloadManager {
         return status
     }
 
+    func isQueued(bookID: UUID, chapterID: UUID) -> Bool {
+        queue.contains { $0.bookID == bookID && $0.isActive && $0.chapterIDs.contains(chapterID) }
+    }
+
     var taskBookIDs: Set<UUID> { Set(queue.map(\.bookID)) }
 
     func canResume(bookID: UUID) -> Bool {

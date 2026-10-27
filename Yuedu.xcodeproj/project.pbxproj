@@ -26,6 +26,7 @@
 		2EBBBA3FBB7886D3AC5163C6 /* YueduSourcePasteViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE5CBB46FF398140B55A3ECE /* YueduSourcePasteViewController.swift */; };
 		308740E79A5108AB5EAA6CBA /* YueduCacheManagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB5B1D728DE39429601DC876 /* YueduCacheManagementTests.swift */; };
 		3219BA62CD0D1AF52C403055 /* YueduLibraryToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 225E260AC2912EF206BBC1AF /* YueduLibraryToolsTests.swift */; };
+		3416D9A9F9A003F7CD8E7C6D /* YueduReadingCheckpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161FDB3D835932E2482880D4 /* YueduReadingCheckpoint.swift */; };
 		38C6BCB3777318308473167E /* SourceCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40623A20590C1BB7771994B4 /* SourceCompatibilityTests.swift */; };
 		3BBF38F8DF9956C21CFDBC2E /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = F6554196889C66BB63531751 /* libz.tbd */; };
 		3CA69EEF34B48EAAB8F548C7 /* YueduTextPurification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83C069AD90603F61D35264C9 /* YueduTextPurification.swift */; };
@@ -38,6 +39,7 @@
 		4F5600B92D4D50A5FCDE2DEA /* SourceExploreViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9DD05A1695987154C8298C /* SourceExploreViewController.swift */; };
 		4FD6C1F51F05011113CAF45C /* YueduTypographyViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21EB622A4098B161EA6D51AC /* YueduTypographyViewController.swift */; };
 		5470869C6840B17D41CA203F /* SourceLoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D9595E2764EDF0971D5696 /* SourceLoginViewController.swift */; };
+		57923FBE3BC1137660AEF002 /* YueduBookChoices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3022B48B1E8607E457DC5845 /* YueduBookChoices.swift */; };
 		5D8EB0610FA0CF59AA6E1765 /* YueduTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A9D6A390658BFB5CED0B1AB /* YueduTypography.swift */; };
 		62D9BBE4884A037CA2BAA8F0 /* YueduSourceSwitchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70AADC3463EB4A46A9C6E17 /* YueduSourceSwitchUITests.swift */; };
 		6753BC1E142B9F447F5EEC16 /* LegadoBrowserController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58FAB3C641127BC41FC88F6 /* LegadoBrowserController.swift */; };
@@ -56,6 +58,7 @@
 		7E3C42C6685BC1674F394F54 /* LegadoRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4458A259CFC8654E3B2617 /* LegadoRuntime.swift */; };
 		81767D62CBB2ECF76C43A2E4 /* runtime.js in Resources */ = {isa = PBXBuildFile; fileRef = B32E3979AD9648529A35B759 /* runtime.js */; };
 		873B1C7404CF6DC4CEEC17EA /* YueduFollowingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1054D9B1678B7B6469131EF /* YueduFollowingUITests.swift */; };
+		8DBFE23E1EE267342A25CC73 /* YueduExperienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 978B18EC26C15FEC4C088A78 /* YueduExperienceTests.swift */; };
 		8EAA04636E831261EFAD316E /* SampleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894B6402687DF565E576CF5C /* SampleLibrary.swift */; };
 		8F57CBF72CAB190C092BC5BD /* YueduUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3495416E3F2F115E994A785D /* YueduUITests.swift */; };
 		92AC312039017C70394310E3 /* YueduCacheViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BC48D5F8A951B1772A2B5D /* YueduCacheViewController.swift */; };
@@ -72,6 +75,8 @@
 		B0DDE7D4CABC7EFBE9EA8828 /* LegadoRuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F15703897C16B1FF2219945 /* LegadoRuleTests.swift */; };
 		B601DC43B7346FD8B6BD7193 /* YueduFullScreenUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 830567508468AAB985EFCF3F /* YueduFullScreenUITests.swift */; };
 		B7723D428722594C1C9DC441 /* YueduSourceTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = D398077E39C7BB9266B88E54 /* YueduSourceTools.swift */; };
+		B80FEDB55E7D8804AA098674 /* YueduChapterRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0246251C33AA8E3B07209321 /* YueduChapterRequests.swift */; };
+		BB2D52471BFAD11317E70E62 /* YueduSearchPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A71495E9317FDCA1892A1E /* YueduSearchPreferences.swift */; };
 		BBD74A02D65B2AE59196609B /* YueduCacheManagement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535781B2C0DACABD1D10D071 /* YueduCacheManagement.swift */; };
 		BC4FCCD34E14292DD96A5072 /* ReaderContentsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F623C4018833263578AB7E /* ReaderContentsViewController.swift */; };
 		C154A8C42A2D6878CECB08B1 /* LibraryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15648E7E9DC9B7008DDD89CF /* LibraryStoreTests.swift */; };
@@ -95,6 +100,7 @@
 		D80AF1B08813BC3E79F2CB0B /* ReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9DB37DCF7D30947D4FA4E1 /* ReaderTests.swift */; };
 		D8B2DF31E5A1534FA9DD5575 /* YueduPurificationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29833372A212093B1362FF78 /* YueduPurificationUITests.swift */; };
 		D8F9231EA7EB94D67EBEA862 /* YueduPurificationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC7FC74129E4AECAA605B520 /* YueduPurificationViewController.swift */; };
+		DA887FACF20695E75E6DEEF5 /* YueduExperienceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DBEF21781B70D4C8B56D7D /* YueduExperienceUITests.swift */; };
 		DAD5E02FD35147A66B63DB41 /* SourceEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FBFD4FE846B79D876ABABB4 /* SourceEngineTests.swift */; };
 		DFE9177E0CECA2D91C355D00 /* ReaderPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D9888CE06DD083EF56940A0 /* ReaderPreferences.swift */; };
 		EDD846B4F19702F044D1C6F0 /* YueduLibraryBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0472C2632DCC4DB74AFE15A5 /* YueduLibraryBackup.swift */; };
@@ -127,6 +133,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0246251C33AA8E3B07209321 /* YueduChapterRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduChapterRequests.swift; sourceTree = "<group>"; };
 		0278199E831F99F9E9EA405A /* EPUBArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBArchive.swift; sourceTree = "<group>"; };
 		02936E354F09AB80C8F89057 /* YueduSourceSwitch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduSourceSwitch.swift; sourceTree = "<group>"; };
 		029F407F777B00FD47506A5E /* ReaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderViewController.swift; sourceTree = "<group>"; };
@@ -138,6 +145,7 @@
 		0B2E1DD9B07FA302E9810FFA /* YueduDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduDownloadManager.swift; sourceTree = "<group>"; };
 		0E2BE315AB0453625154818E /* YueduOnlineSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduOnlineSearchTests.swift; sourceTree = "<group>"; };
 		15648E7E9DC9B7008DDD89CF /* LibraryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStoreTests.swift; sourceTree = "<group>"; };
+		161FDB3D835932E2482880D4 /* YueduReadingCheckpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduReadingCheckpoint.swift; sourceTree = "<group>"; };
 		1A2672779C1E2B5CA58B3B1A /* YueduPagination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduPagination.swift; sourceTree = "<group>"; };
 		1A9DD05A1695987154C8298C /* SourceExploreViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceExploreViewController.swift; sourceTree = "<group>"; };
 		1F15703897C16B1FF2219945 /* LegadoRuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoRuleTests.swift; sourceTree = "<group>"; };
@@ -145,11 +153,12 @@
 		21EB622A4098B161EA6D51AC /* YueduTypographyViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduTypographyViewController.swift; sourceTree = "<group>"; };
 		225E260AC2912EF206BBC1AF /* YueduLibraryToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduLibraryToolsTests.swift; sourceTree = "<group>"; };
 		233869572390501AD9F9A7F0 /* DiscoverViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewController.swift; sourceTree = "<group>"; };
-		23E6EC515D53DA1DE0CDEE1A /* Yuedu.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Yuedu.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		23E6EC515D53DA1DE0CDEE1A /* Yuedu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Yuedu.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2599327AA930A0E2241FDFDF /* YueduReadingPagePosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduReadingPagePosition.swift; sourceTree = "<group>"; };
 		29833372A212093B1362FF78 /* YueduPurificationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduPurificationUITests.swift; sourceTree = "<group>"; };
 		2D68CA0F1B7763FEC9A9EFD6 /* YueduCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduCatalog.swift; sourceTree = "<group>"; };
 		2E575EE9678E8075A9035D1E /* YueduTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YueduTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3022B48B1E8607E457DC5845 /* YueduBookChoices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduBookChoices.swift; sourceTree = "<group>"; };
 		3495416E3F2F115E994A785D /* YueduUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduUITests.swift; sourceTree = "<group>"; };
 		360AD29079644A7F65EE9571 /* example-source.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "example-source.json"; sourceTree = "<group>"; };
 		37A3FB27A38D6CA15748F13E /* LegadoHTTPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoHTTPTests.swift; sourceTree = "<group>"; };
@@ -159,6 +168,7 @@
 		3FBFD4FE846B79D876ABABB4 /* SourceEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceEngineTests.swift; sourceTree = "<group>"; };
 		40623A20590C1BB7771994B4 /* SourceCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceCompatibilityTests.swift; sourceTree = "<group>"; };
 		40B74000991B5F6D114F98EB /* YueduSourceCheckViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduSourceCheckViewController.swift; sourceTree = "<group>"; };
+		41DBEF21781B70D4C8B56D7D /* YueduExperienceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduExperienceUITests.swift; sourceTree = "<group>"; };
 		4434B311CE258BA3C73D876B /* YueduSourceToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduSourceToolsTests.swift; sourceTree = "<group>"; };
 		44AE4E00069E999796F69600 /* LegadoRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoRule.swift; sourceTree = "<group>"; };
 		49EDE8B6760F10F9EC6936B0 /* YueduSearchIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduSearchIdentity.swift; sourceTree = "<group>"; };
@@ -200,8 +210,10 @@
 		83E3E70054BDDAB4A174005B /* YueduBookDetailViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduBookDetailViewController.swift; sourceTree = "<group>"; };
 		894B6402687DF565E576CF5C /* SampleLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleLibrary.swift; sourceTree = "<group>"; };
 		8BBB30BAE51F2DE21B2CA464 /* SourceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceEngine.swift; sourceTree = "<group>"; };
+		91A71495E9317FDCA1892A1E /* YueduSearchPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduSearchPreferences.swift; sourceTree = "<group>"; };
 		95C4B4A54C838C7A426CAAF3 /* LegadoAdvancedRuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoAdvancedRuleTests.swift; sourceTree = "<group>"; };
 		96437A3D5532601AECC6B470 /* YueduShelfManagement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduShelfManagement.swift; sourceTree = "<group>"; };
+		978B18EC26C15FEC4C088A78 /* YueduExperienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduExperienceTests.swift; sourceTree = "<group>"; };
 		A2AEC5C8C432B3D4AFAC23C7 /* LegadoNativeUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegadoNativeUtilities.swift; sourceTree = "<group>"; };
 		A8B4CBE7FACD2EAD02373AF0 /* YueduSearchBookViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduSearchBookViewController.swift; sourceTree = "<group>"; };
 		A8E9A3E360FF406B4A9F803E /* SourceFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFlowUITests.swift; sourceTree = "<group>"; };
@@ -291,6 +303,7 @@
 				F3AA928C1B0922AA4369AE54 /* YueduBackgroundAndCurlUITests.swift */,
 				FD1B305DF45D9F5A626D2833 /* YueduCacheManagementUITests.swift */,
 				D9B38E4213B3769ACD4DAB30 /* YueduDiscoveryUITests.swift */,
+				41DBEF21781B70D4C8B56D7D /* YueduExperienceUITests.swift */,
 				E1054D9B1678B7B6469131EF /* YueduFollowingUITests.swift */,
 				830567508468AAB985EFCF3F /* YueduFullScreenUITests.swift */,
 				7A0F0DD4DEF7D68F3EE2469E /* YueduOnlineSearchUITests.swift */,
@@ -328,10 +341,12 @@
 				827D2F2AED803E6FC0063281 /* YueduBackgroundTransfer.swift */,
 				535781B2C0DACABD1D10D071 /* YueduCacheManagement.swift */,
 				2D68CA0F1B7763FEC9A9EFD6 /* YueduCatalog.swift */,
+				0246251C33AA8E3B07209321 /* YueduChapterRequests.swift */,
 				C29636B1D0878240A44FC704 /* YueduChapterStorage.swift */,
 				0B2E1DD9B07FA302E9810FFA /* YueduDownloadManager.swift */,
 				6D57108354D23AD2071E3A6D /* YueduFollowing.swift */,
 				0472C2632DCC4DB74AFE15A5 /* YueduLibraryBackup.swift */,
+				161FDB3D835932E2482880D4 /* YueduReadingCheckpoint.swift */,
 				96437A3D5532601AECC6B470 /* YueduShelfManagement.swift */,
 				02936E354F09AB80C8F89057 /* YueduSourceSwitch.swift */,
 			);
@@ -356,6 +371,7 @@
 				BB5B1D728DE39429601DC876 /* YueduCacheManagementTests.swift */,
 				4F91CD75B66B0EE8402949E3 /* YueduChapterStorageTests.swift */,
 				5FD0842F6D25004A02711602 /* YueduDiscoveryTests.swift */,
+				978B18EC26C15FEC4C088A78 /* YueduExperienceTests.swift */,
 				7A61B077E0CB5EE5097EE143 /* YueduFollowingTests.swift */,
 				225E260AC2912EF206BBC1AF /* YueduLibraryToolsTests.swift */,
 				0E2BE315AB0453625154818E /* YueduOnlineSearchTests.swift */,
@@ -421,10 +437,12 @@
 				EDC0F9CBA7C652D56CA8F388 /* SourceModels.swift */,
 				76BCAA8089F2277961E26C50 /* SourceStore.swift */,
 				E6991DD7D59E8C4BFD1C9AAE /* SourcesViewController.swift */,
+				3022B48B1E8607E457DC5845 /* YueduBookChoices.swift */,
 				764D2F0AD3C37BC8E1D89FAD /* YueduDiscoveryModel.swift */,
 				7CD797709C54C7024A6B09EB /* YueduOnlineSearchModel.swift */,
 				A8B4CBE7FACD2EAD02373AF0 /* YueduSearchBookViewController.swift */,
 				49EDE8B6760F10F9EC6936B0 /* YueduSearchIdentity.swift */,
+				91A71495E9317FDCA1892A1E /* YueduSearchPreferences.swift */,
 				D2FF94E0F29061B81E65BE43 /* YueduSearchScopeViewController.swift */,
 				40B74000991B5F6D114F98EB /* YueduSourceCheckViewController.swift */,
 				EE5CBB46FF398140B55A3ECE /* YueduSourcePasteViewController.swift */,
@@ -588,6 +606,7 @@
 				308740E79A5108AB5EAA6CBA /* YueduCacheManagementTests.swift in Sources */,
 				F25AD89D803243D87563122B /* YueduChapterStorageTests.swift in Sources */,
 				4C2F18A021BC0A5D7A06FFA2 /* YueduDiscoveryTests.swift in Sources */,
+				8DBFE23E1EE267342A25CC73 /* YueduExperienceTests.swift in Sources */,
 				D6C8FFD43F9269CA3787D93C /* YueduFollowingTests.swift in Sources */,
 				3219BA62CD0D1AF52C403055 /* YueduLibraryToolsTests.swift in Sources */,
 				CC211B5BAF3850109E1A512A /* YueduOnlineSearchTests.swift in Sources */,
@@ -633,10 +652,12 @@
 				F35493A6C8268C5B3D4D036B /* SourcesViewController.swift in Sources */,
 				D2C36DB191017D010A9EC3AE /* YueduBackgroundTransfer.swift in Sources */,
 				3D6EA90F8C54F279EA3A1941 /* YueduBackupViewController.swift in Sources */,
+				57923FBE3BC1137660AEF002 /* YueduBookChoices.swift in Sources */,
 				0972E065AB3247D314C0C4AD /* YueduBookDetailViewController.swift in Sources */,
 				BBD74A02D65B2AE59196609B /* YueduCacheManagement.swift in Sources */,
 				92AC312039017C70394310E3 /* YueduCacheViewController.swift in Sources */,
 				F000A8A42DE945D057BF5EB6 /* YueduCatalog.swift in Sources */,
+				B80FEDB55E7D8804AA098674 /* YueduChapterRequests.swift in Sources */,
 				CB5379F8A2D1ABDBEA3DA0A5 /* YueduChapterStorage.swift in Sources */,
 				CFFF251A514176AE9EB7EEE5 /* YueduDiscoveryModel.swift in Sources */,
 				7869ED9B562D6A231ECEFE80 /* YueduDownloadManager.swift in Sources */,
@@ -647,9 +668,11 @@
 				D6634A405C0BC5C41F0804ED /* YueduPageReaderController.swift in Sources */,
 				C5E8226185230F5AF18E30F2 /* YueduPagination.swift in Sources */,
 				D8F9231EA7EB94D67EBEA862 /* YueduPurificationViewController.swift in Sources */,
+				3416D9A9F9A003F7CD8E7C6D /* YueduReadingCheckpoint.swift in Sources */,
 				F4CC9B5832C2EAE8457548CC /* YueduReadingPagePosition.swift in Sources */,
 				A73CD3E37E80418B27FE382C /* YueduSearchBookViewController.swift in Sources */,
 				ACC4935154A5238FF7647D94 /* YueduSearchIdentity.swift in Sources */,
+				BB2D52471BFAD11317E70E62 /* YueduSearchPreferences.swift in Sources */,
 				67B4396BE3F0D99719E31774 /* YueduSearchScopeViewController.swift in Sources */,
 				AA1D51699BDFE986DB2589E6 /* YueduShelfBookCell.swift in Sources */,
 				0C2E5692ED4E7BCC17F3CB8F /* YueduShelfGroupsViewController.swift in Sources */,
@@ -673,6 +696,7 @@
 				C8979A0A885766CBBEA0AA82 /* YueduBackgroundAndCurlUITests.swift in Sources */,
 				1AC51470E1ED9E8345DD3340 /* YueduCacheManagementUITests.swift in Sources */,
 				9A1E796A9D094419F64AC134 /* YueduDiscoveryUITests.swift in Sources */,
+				DA887FACF20695E75E6DEEF5 /* YueduExperienceUITests.swift in Sources */,
 				873B1C7404CF6DC4CEEC17EA /* YueduFollowingUITests.swift in Sources */,
 				B601DC43B7346FD8B6BD7193 /* YueduFullScreenUITests.swift in Sources */,
 				4B246C86C525793774189F3C /* YueduOnlineSearchUITests.swift in Sources */,
@@ -715,6 +739,10 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.yuedu;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -877,6 +905,10 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.yuedu;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;

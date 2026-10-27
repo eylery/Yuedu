@@ -354,13 +354,15 @@ private final class YueduPurificationPreviewController: UIViewController {
         input.accessibilityIdentifier = "purification.original"
         output.accessibilityIdentifier = "purification.output"
         output.isEditable = false
-        report.font = .systemFont(ofSize: 12)
+        report.font = .yueduUI(ofSize: 12)
+        report.adjustsFontForContentSizeCategory = true
         report.textColor = Theme.secondary
         report.numberOfLines = 0
         report.accessibilityIdentifier = "purification.report"
         report.text = "\(original == nil ? "示例文本" : chapterTitle) · 编辑预览文字不会修改缓存。"
         for text in [input, output] {
-            text.font = .systemFont(ofSize: 17)
+            text.font = .yueduUI(ofSize: 17)
+            text.adjustsFontForContentSizeCategory = true
             text.backgroundColor = Theme.surface
             text.layer.cornerRadius = 12
             text.smartQuotesType = .no

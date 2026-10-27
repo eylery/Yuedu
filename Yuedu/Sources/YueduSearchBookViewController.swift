@@ -22,6 +22,11 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
     private var generation = UUID()
     private var isLoading = false
     private var sourceObserver: NSObjectProtocol?
+    private let choices = YueduBookChoices()
+    private var previewBooks: [String: Book] = [:]
+    private var previewFailures: [String: String] = [:]
+    private var readyPreviews = Set<String>()
+    private var isPreviewing = false
 
     private var selected: SourceSearchResult { versions[selectedIndex] }
     private var savedBook: Book? {
@@ -38,7 +43,9 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
             SourceStore.shared.source(id: id).map { (id, $0) }
         })
         super.init(nibName: nil, bundle: nil)
-        selectedIndex = self.versions.firstIndex { result in
+        selectedIndex = choices.preferred(in: self.versions).flatMap { preferred in
+            self.versions.firstIndex { $0.id == preferred.id }
+        } ?? self.versions.firstIndex { result in
             LibraryStore.shared.books.contains {
                 $0.sourceID == result.sourceID && $0.bookURL == result.bookURL
             }
@@ -61,7 +68,8 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
         table.register(UITableViewCell.self, forCellReuseIdentifier: "YueduSearchBook")
         view.addSubview(table)
 
-        noticeLabel.font = .systemFont(ofSize: 13)
+        noticeLabel.font = .yueduUI(ofSize: 13)
+        noticeLabel.adjustsFontForContentSizeCategory = true
         noticeLabel.textColor = Theme.secondary
         noticeLabel.numberOfLines = 0
         noticeLabel.textAlignment = .center
@@ -128,10 +136,11 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
             $0.enabled && SourceStore.shared.source(id: $0.id) == $0
         } ?? false
         var primary = UIButton.Configuration.filled()
-        primary.title = isLoading ? "正在加载目录…" : (saved ? "继续阅读" : "加入书架并阅读")
+        primary.title = isLoading ? (isPreviewing ? "正在加载试读…" : "正在加载目录…") : (saved ? "继续阅读" : "加入书架并阅读")
         primary.baseBackgroundColor = Theme.accent
         primary.baseForegroundColor = .white
         primary.cornerStyle = .medium
+        primary.titleLineBreakMode = .byWordWrapping
         primary.showsActivityIndicator = isLoading
         readButton.configuration = primary
         readButton.isEnabled = !isLoading && (saved || sourceIsCurrent)
@@ -140,6 +149,7 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
         secondary.baseBackgroundColor = Theme.pale
         secondary.baseForegroundColor = Theme.accent
         secondary.cornerStyle = .medium
+        secondary.titleLineBreakMode = .byWordWrapping
         saveButton.configuration = secondary
         saveButton.isEnabled = !saved && !isLoading && sourceIsCurrent
         navigationItem.rightBarButtonItem = isLoading
@@ -150,14 +160,14 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
         }
     }
 
-    func numberOfSections(in tableView: UITableView) -> Int { 2 }
+    func numberOfSections(in tableView: UITableView) -> Int { 3 }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        section == 0 ? 1 : sourceRows.count
+        section == 1 ? sourceRows.count : 1
     }
 
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        section == 0 ? nil : "选择书源 · \(groups.count) 个书源"
+        section == 1 ? "选择书源 · \(groups.count) 个书源" : nil
     }
 
     func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
@@ -176,12 +186,29 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
         content.secondaryTextProperties.color = Theme.secondary
         content.secondaryTextProperties.numberOfLines = 0
         cell.accessibilityHint = nil
-        if indexPath.section == 0 {
+        if indexPath.section == 2 {
+            content.text = isPreviewing ? "正在获取目录与首章…" : "目录与首章试读"
+            content.textProperties.font = .yueduUI(ofSize: 16, weight: .semibold)
+            var detail = "点击查看章节数量、目录摘要和首章正文，试读不会加入书架。"
+            if let preview = previewBooks[selected.id] {
+                detail = "共 \(preview.chapters.count) 章 · 末章：\(preview.chapters.last?.title ?? "")\n\n"
+                    + preview.chapters.prefix(5).map(\.title).joined(separator: "\n")
+                if let chapter = preview.chapters.first, chapter.hasCachedContent {
+                    detail += "\n\n首章试读\n" + String(chapter.content.prefix(1800))
+                }
+            }
+            if let failure = previewFailures[selected.id] { detail += "\n\n上次加载失败：\(failure)\n点击重试，或选择其他收录。" }
+            content.secondaryText = detail
+            cell.accessibilityIdentifier = "search.book.preview"
+            cell.accessibilityValue = readyPreviews.contains(selected.id) ? "试读已就绪" : "未试读"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+        } else if indexPath.section == 0 {
             content.text = YueduSearchIdentity.title(selected.title)
-            content.textProperties.font = .readingSerif(26)
+            content.textProperties.font = .yueduUISerif(26)
             content.textProperties.numberOfLines = 0
             content.secondaryText = YueduSearchIdentity.author(selected.author) + "\n\n" + (selected.summary.isEmpty ? "暂无简介" : selected.summary)
-            content.secondaryTextProperties.font = .systemFont(ofSize: 15)
+            content.secondaryTextProperties.font = .yueduUI(ofSize: 15)
             content.directionalLayoutMargins.top = 24
             content.directionalLayoutMargins.bottom = 24
             cell.accessoryType = .none
@@ -195,7 +222,7 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
                 let isSelected = selected.sourceID == group.sourceID
                 let record = isSelected ? selected : group.records[0]
                 content.text = group.sourceName
-                content.textProperties.font = .systemFont(ofSize: 16, weight: .medium)
+                content.textProperties.font = .yueduUI(ofSize: 16, weight: .medium)
                 var details = [URL(string: record.bookURL)?.host ?? "在线书源"]
                 if group.records.count > 1 {
                     let expanded = expandedSources.contains(group.sourceID)
@@ -207,6 +234,8 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
                 if let saved = savedBook(for: record) {
                     details.append("已在书架 · \(saved.currentChapterTitle)")
                 }
+                if previewFailures[record.id] != nil { details.append("上次加载失败") }
+                else if let preview = previewBooks[record.id] { details.append("已获取目录 · \(preview.chapters.count) 章") }
                 content.secondaryText = details.joined(separator: " · ")
                 cell.accessoryType = isSelected ? .checkmark : .none
                 cell.accessibilityIdentifier = "search.book.source.\(group.sourceName)"
@@ -215,9 +244,9 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
             case .record(let groupIndex, let recordIndex):
                 let record = groups[groupIndex].records[recordIndex]
                 content.text = "收录 \(recordIndex + 1)"
-                content.textProperties.font = .systemFont(ofSize: 15, weight: .medium)
+                content.textProperties.font = .yueduUI(ofSize: 15, weight: .medium)
                 content.secondaryText = recordDescription(record)
-                content.secondaryTextProperties.font = .systemFont(ofSize: 13)
+                content.secondaryTextProperties.font = .yueduUI(ofSize: 13)
                 content.directionalLayoutMargins.leading = 36
                 cell.backgroundColor = Theme.pale.withAlphaComponent(0.45)
                 cell.accessoryType = record.id == selected.id ? .checkmark : .none
@@ -233,13 +262,15 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: false)
+        if indexPath.section == 2 { preview(); return }
         guard indexPath.section == 1 else { return }
         switch sourceRows[indexPath.row] {
         case .source(let groupIndex):
             let group = groups[groupIndex]
             if group.records.count == 1 && selected.sourceID == group.sourceID { return }
             if selected.sourceID != group.sourceID {
-                let preferred = group.records.first { savedBook(for: $0) != nil } ?? group.records[0]
+                let preferred = choices.preferred(in: group.records)
+                    ?? group.records.first { savedBook(for: $0) != nil } ?? group.records[0]
                 select(preferred)
             }
             if group.records.count > 1 {
@@ -262,6 +293,7 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
               let index = versions.firstIndex(where: { $0.id == result.id }) else { return }
         cancelLoading()
         selectedIndex = index
+        choices.remember(result)
     }
 
     private func rebuildSourceRows() {
@@ -290,6 +322,11 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
 
     private func recordDescription(_ result: SourceSearchResult) -> String {
         var lines = ["作者标注：\(result.author)"]
+        if let failure = previewFailures[result.id] { lines.append("上次加载失败：\(failure)") }
+        if let preview = previewBooks[result.id] {
+            lines.append("已获取目录 · \(preview.chapters.count) 章 · 末章：\(preview.chapters.last?.title ?? "")")
+            if preview.chapters.first?.hasCachedContent == true { lines.append("首章试读可用") }
+        }
         let fields = [("kind", "分类"), ("wordCount", "字数"), ("lastChapter", "最新章节")]
         for (key, label) in fields {
             if let value = result.context?[key]?.scalarString?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -315,6 +352,7 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
         operation = nil
         generation = UUID()
         isLoading = false
+        isPreviewing = false
         updateActions()
     }
 
@@ -337,7 +375,9 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
         generation = token
         operation = Task { [weak self] in
             do {
-                let book = try await SourceEngine.shared.loadBook(result, source: source, timeout: 20)
+                let book: Book
+                if let preview = self?.previewBooks[result.id] { book = preview }
+                else { book = try await SourceEngine.shared.loadBook(result, source: source, timeout: 20) }
                 try Task.checkCancellation()
                 guard let self, self.generation == token else { return }
                 guard SourceStore.shared.source(id: source.id) == source else {
@@ -348,6 +388,8 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
                     throw SourceError.invalid(error)
                 }
                 self.isLoading = false
+                self.previewFailures[result.id] = nil
+                self.choices.remember(result)
                 self.operation = nil
                 self.updateActions()
                 self.table.reloadData()
@@ -356,9 +398,62 @@ final class YueduSearchBookViewController: UIViewController, UITableViewDataSour
             } catch {
                 guard let self, self.generation == token else { return }
                 self.isLoading = false
+                if !Task.isCancelled { self.previewFailures[result.id] = error.localizedDescription }
                 self.operation = nil
                 self.updateActions()
                 self.noticeLabel.text = "加载失败：\(error.localizedDescription)\n可再次点击重试，或选择其他书源。"
+                self.table.reloadData()
+            }
+        }
+    }
+
+    private func preview() {
+        guard !isLoading, let source = sources[selected.sourceID], source.enabled,
+              SourceStore.shared.source(id: source.id) == source else { return }
+        let result = selected
+        if readyPreviews.contains(result.id) { return }
+        isLoading = true
+        isPreviewing = true
+        updateActions()
+        table.reloadData()
+        let token = UUID()
+        generation = token
+        operation = Task { [weak self] in
+            do {
+                var book: Book
+                if let existing = self?.previewBooks[result.id] ?? self?.savedBook(for: result) { book = existing }
+                else { book = try await SourceEngine.shared.loadBook(result, source: source, timeout: 20) }
+                try Task.checkCancellation()
+                guard let self, self.generation == token else { return }
+                if self.previewBooks.count >= 8 { self.previewBooks.removeAll(); self.readyPreviews.removeAll() }
+                self.previewBooks[result.id] = book
+                guard let first = book.chapters.first else { throw SourceError.empty("目录为空。") }
+                let text: String
+                if first.hasCachedContent, let cached = try? await first.body.readAsync() { text = cached }
+                else { text = try await SourceEngine.shared.loadChapter(first, source: source, book: book, timeout: 15) }
+                try Task.checkCancellation()
+                guard self.generation == token, SourceStore.shared.source(id: source.id) == source else { return }
+                book.chapters[0].content = text
+                self.previewBooks[result.id] = book
+                self.readyPreviews.insert(result.id)
+                self.previewFailures[result.id] = nil
+                self.isLoading = false
+                self.isPreviewing = false
+                self.operation = nil
+                self.updateActions()
+                self.noticeLabel.text = "试读已就绪，满意后可加入书架。"
+                self.table.reloadData()
+                self.table.layoutIfNeeded()
+                self.table.scrollToRow(at: IndexPath(row: 0, section: 2), at: .top, animated: true)
+            } catch {
+                guard let self, self.generation == token, !Task.isCancelled else { return }
+                self.previewFailures[result.id] = error.localizedDescription
+                self.isLoading = false
+                self.isPreviewing = false
+                self.operation = nil
+                self.updateActions()
+                self.noticeLabel.text = "试读失败，可点击试读重试或换一条收录。"
+                self.table.reloadData()
             }
         }
     }

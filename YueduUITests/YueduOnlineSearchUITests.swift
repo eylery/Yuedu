@@ -129,8 +129,9 @@ final class YueduOnlineSearchUITests: XCTestCase {
         app.tabBars.buttons["发现"].tap()
         app.buttons["discovery.searchBooks"].tap()
         XCTAssertTrue(app.buttons["search.recent.春日"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["search.scope"].label.contains("1 个书源"))
         app.buttons["search.recent.春日"].tap()
-        guard assertStatus(app, contains: "1 个失败") else { return }
+        guard assertStatus(app, contains: "1 条收录") else { return }
         XCTAssertEqual(app.searchFields["搜索书名、作者"].value as? String, "春日")
         app.buttons["search.history"].tap()
         app.buttons["清空搜索历史"].tap()
@@ -226,22 +227,22 @@ final class YueduOnlineSearchUITests: XCTestCase {
         book.tap()
         let table = app.tables["search.book.details"]
         XCTAssertTrue(table.waitForExistence(timeout: 3))
-        XCTAssertEqual(table.cells.count, 3, "简介加两个书源，同源记录默认收起")
+        XCTAssertEqual(table.cells.count, 4, "简介、两个书源和试读入口，同源记录默认收起")
         let first = app.cells["search.book.source.搜索测试·一号"]
         first.tap()
-        XCTAssertEqual(table.cells.count, 10, "展开一号书源的七条收录")
+        XCTAssertEqual(table.cells.count, 11, "展开一号书源的七条收录")
         let secondRecord = app.cells["search.book.record.搜索测试·一号.2"]
         for _ in 0..<4 where !secondRecord.isHittable { table.swipeUp() }
         secondRecord.tap()
         XCTAssertEqual(secondRecord.value as? String, "已选择")
         for _ in 0..<4 where !first.isHittable { table.swipeDown() }
         first.tap()
-        XCTAssertEqual(table.cells.count, 3)
+        XCTAssertEqual(table.cells.count, 4)
         XCTAssertTrue(app.staticTexts["search.book.status"].label.contains("收录 2"))
         app.cells["search.book.source.搜索测试·二号"].tap()
         XCTAssertEqual(app.cells["search.book.source.搜索测试·二号"].value as? String, "已选择")
         first.tap()
-        secondRecord.tap()
+        XCTAssertEqual(secondRecord.value as? String, "已选择", "切换书源后应记住尚未入库的选择")
         first.tap()
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "One book with collapsed source records"
@@ -260,10 +261,45 @@ final class YueduOnlineSearchUITests: XCTestCase {
         app.buttons["reader.back"].tap()
         app.navigationBars["书籍详情"].buttons.element(boundBy: 0).tap()
         book.tap()
-        XCTAssertEqual(table.cells.count, 3)
+        XCTAssertEqual(table.cells.count, 4)
         XCTAssertEqual(app.buttons["search.book.read"].label, "继续阅读")
         first.tap()
         XCTAssertEqual(app.cells["search.book.record.搜索测试·一号.2"].value as? String, "已选择")
+    }
+
+    @MainActor
+    func testPreviewDoesNotSaveAndLibraryQueryCarriesIntoOnlineSearch() async throws {
+        let app = try await prepare()
+        app.navigationBars["搜索书籍"].buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["书架"].tap()
+        app.buttons["搜索书架"].tap()
+        let shelfSearch = app.searchFields["书名、作者或内容简介"]
+        shelfSearch.tap()
+        shelfSearch.typeText("西游记")
+        app.buttons["shelf.searchOnline"].tap()
+        XCTAssertEqual(app.searchFields["搜索书名、作者"].value as? String, "西游记")
+        guard assertStatus(app, contains: "9 条收录") else { return }
+        app.tables["search.results"].cells.containing(NSPredicate(format: "label CONTAINS %@", "吴承恩")).firstMatch.tap()
+        let table = app.tables["search.book.details"]
+        let preview = app.cells["search.book.preview"]
+        for _ in 0..<4 where !preview.isHittable { table.swipeUp() }
+        preview.tap()
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "试读已就绪"), object: preview)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
+        XCTAssertEqual(app.buttons["search.book.save"].label, "加入书架")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Catalog and first chapter preview before saving"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.tabBars.buttons["我的"].tap()
+        app.tabBars.buttons["书架"].tap()
+        XCTAssertEqual(app.buttons["search.book.save"].label, "加入书架")
+        app.buttons["search.book.save"].tap()
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "已在书架"), object: app.buttons["search.book.save"])
+        XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 5), .completed)
+        app.buttons["search.book.read"].tap()
+        XCTAssertTrue(app.staticTexts["reader.text"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["reader.text"].label.contains("收录正文"))
     }
 
 }

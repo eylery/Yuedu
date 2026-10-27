@@ -3,12 +3,13 @@ import UIKit
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
+    private var appearanceObserver: NSObjectProtocol?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         if ProcessInfo.processInfo.arguments.contains("--uitesting-reset") {
             let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Yuedu")
             try? FileManager.default.removeItem(at: directory)
-            for key in ["reader.fontSize", "reader.lineSpacing", "reader.paper", "reader.turnStyle", "reader.fullScreen", "reader.fullScreenStatusBar", "reader.typography", "shelf.sort", "shelf.showSamples", "following.autoCheck", "search.history"] {
+            for key in ["reader.fontSize", "reader.lineSpacing", "reader.paper", "reader.turnStyle", "reader.fullScreen", "reader.fullScreenStatusBar", "reader.typography", "reader.prefetchNextChapter", "shelf.sort", "shelf.showSamples", "following.autoCheck", "search.history", YueduSearchPreferences.performanceKey, YueduSearchPreferences.scopeKey, YueduBookChoices.key] {
                 UserDefaults.standard.removeObject(forKey: key)
             }
         }
@@ -22,7 +23,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         _ = YueduDownloadManager.shared
         let window = UIWindow(frame: UIScreen.main.bounds)
         window.tintColor = Theme.accent
-        window.overrideUserInterfaceStyle = .light
+        window.overrideUserInterfaceStyle = ReaderPreferences.load().paper == .night ? .dark : .unspecified
+        appearanceObserver = NotificationCenter.default.addObserver(forName: .yueduAppearanceChanged, object: nil, queue: .main) { [weak window] _ in
+            window?.overrideUserInterfaceStyle = ReaderPreferences.load().paper == .night ? .dark : .unspecified
+        }
         window.rootViewController = MainTabBarController()
         window.makeKeyAndVisible()
         self.window = window
